@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstantiateMsg",
+  "type": "object",
+  "required": [
+    "denom",
+    "notes",
+    "owner",
+    "token_factory"
+  ],
+  "properties": {
+    "burn_it": {
+      "description": "we can either hold the tokens, or burn them. we default to burning them",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "denom": {
+      "description": "'ticket' denom which we will burn",
+      "type": "string"
+    },
+    "notes": {
+      "description": "'description'",
+      "type": "string"
+    },
+    "owner": {
+      "description": "'admin'",
+      "type": "string"
+    },
+    "token_factory": {
+      "description": "different chains have different token factory implementations",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

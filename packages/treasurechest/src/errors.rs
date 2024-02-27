@@ -26,11 +26,6 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
-    #[error("Invalid zero amount")]
-    InvalidZeroAmount {},
-
-    #[error("Already exists")]
-    AlreadyExists {},
     #[error("Contract can't be migrated! {current_name:?} {current_version:?}")]
     MigrationError {
         current_name: String,

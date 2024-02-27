@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConfigResponse",
+  "type": "object",
+  "required": [
+    "burn_it",
+    "denom",
+    "notes",
+    "owner",
+    "token_factory_type"
+  ],
+  "properties": {
+    "burn_it": {
+      "type": "boolean"
+    },
+    "denom": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "token_factory_type": {
+      "$ref": "#/definitions/TokenFactoryType"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "TokenFactoryType": {
+      "type": "string",
+      "enum": [
+        "cosm_wasm",
+        "kujira",
+        "injective",
+        "osmosis"
+      ]
+    }
+  }
+}
