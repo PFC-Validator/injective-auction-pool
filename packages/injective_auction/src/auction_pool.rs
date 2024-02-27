@@ -1,6 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Decimal};
-use osmosis_std_derive::CosmwasmExt;
 
 #[cw_serde]
 pub struct InstantiateMsg {

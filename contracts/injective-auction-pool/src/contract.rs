@@ -31,7 +31,9 @@ pub fn instantiate(
         },
     )?;
 
-    let current_auction_round = query_current_auction(deps.as_ref())?.auction_round;
+    let current_auction_round = query_current_auction(deps.as_ref())?
+        .auction_round
+        .ok_or(ContractError::CurrentAuctionQueryError)?;
     CURRENT_AUCTION_NUMBER.save(deps.storage, &current_auction_round)?;
 
     //todo mint lp for current auction

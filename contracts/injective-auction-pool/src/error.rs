@@ -1,10 +1,14 @@
 use cosmwasm_std::StdError;
+use cw_utils::PaymentError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
+
+    #[error("{0}")]
+    PaymentError(#[from] PaymentError),
 
     #[error("Unauthorized")]
     Unauthorized {},
@@ -22,4 +26,7 @@ pub enum ContractError {
         "The auction is locked since it's about to finish, therefore no withdrawals are allowed"
     )]
     PooledAuctionLocked,
+
+    #[error("Couldn't parse the current auction query response")]
+    CurrentAuctionQueryError,
 }

@@ -25,7 +25,9 @@ pub(crate) fn join_pool(
 
     let coin = info.funds[0].clone();
 
-    let current_auction_round = query_current_auction(deps.as_ref())?.auction_round;
+    let current_auction_round = query_current_auction(deps.as_ref())?
+        .auction_round
+        .ok_or(ContractError::CurrentAuctionQueryError)?;
 
     ensure!(
         current_auction_round == auction_round,
@@ -81,7 +83,10 @@ pub(crate) fn exit_pool(
 
     let lp_denom = format!(
         "factory/{}/{}",
-        env.contract.address, current_auction_round_response.auction_round
+        env.contract.address,
+        current_auction_round_response
+            .auction_round
+            .ok_or(ContractError::CurrentAuctionQueryError)?
     );
     cw_utils::must_pay(&info, lp_denom.as_str())?;
 
@@ -89,6 +94,7 @@ pub(crate) fn exit_pool(
         DAY_IN_SECONDS
             > current_auction_round_response
                 .auction_closing_time
+                .ok_or(ContractError::CurrentAuctionQueryError)?
                 .saturating_sub(env.block.time.seconds()),
         ContractError::PooledAuctionLocked
     );

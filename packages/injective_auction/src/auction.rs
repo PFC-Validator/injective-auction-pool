@@ -49,14 +49,14 @@ pub struct QueryCurrentAuctionBasketRequest {}
 )]
 #[proto_message(type_url = "/injective.auction.v1beta1.QueryCurrentAuctionBasketResponse")]
 pub struct QueryCurrentAuctionBasketResponse {
-    // #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag = "1")]
     pub amount: Vec<Coin>,
-    // #[prost(uint64, optional, tag = "2")]
-    pub auction_round: u64,
-    // #[prost(int64, optional, tag = "3")]
-    pub auction_closing_time: u64,
-    // #[prost(string, optional, tag = "4")]
-    pub highest_bidder: String,
-    // #[prost(string, optional, tag = "5")]
-    pub highest_bid_amount: String,
+    #[prost(uint64, optional, tag = "2")]
+    pub auction_round: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub auction_closing_time: ::core::option::Option<u64>,
+    #[prost(string, optional, tag = "4")]
+    pub highest_bidder: ::core::option::Option<String>,
+    #[prost(string, optional, tag = "5")]
+    pub highest_bid_amount: ::core::option::Option<String>,
 }
