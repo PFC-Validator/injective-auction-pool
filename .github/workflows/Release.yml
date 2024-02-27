@@ -19,6 +19,12 @@ jobs:
         with:
           toolchain: stable
           targets: wasm32-unknown-unknown
+
+      - name: Check
+        run: just check
+        env:
+          RUST_BACKTRACE: 1
+
       - name: Check for errors
         run: just optimize
         env:

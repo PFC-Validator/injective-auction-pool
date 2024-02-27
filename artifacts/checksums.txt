@@ -1,1 +1,0 @@
-5aaa589d928f45514f7f950202bce29199c5183e22385ad77a11b1afcfaf6e53  treasurechest_contract-aarch64.wasm
