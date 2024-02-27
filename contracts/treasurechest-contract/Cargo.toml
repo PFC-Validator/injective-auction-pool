@@ -1,0 +1,50 @@
+[package]
+name = "treasurechest-contract"
+description = "modified by PFC. Originally A Staking contract for Valkyrie Protocol - distribute rewards to token holders"
+
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+documentation = { workspace = true }
+keywords = { workspace = true }
+rust-version = { workspace = true }
+
+
+
+exclude = [
+    # Those files are rust-optimizer artifacts. You might want to commit them for convenience but they should not be part of the source code publication.
+    "contract.wasm",
+    "hash.txt",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+
+[features]
+# for quicker tests, cargo test --lib
+# for more explicit tests, cargo test --features=backtraces
+backtraces = ["cosmwasm-std/backtraces"]
+
+[dependencies]
+cosmwasm-std = { workspace = true}
+#, features = ["cosmwasm_1_3"] }
+#getrandom is here so cw-storage-plus can build on wasm.
+#getrandom = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+cw-ownable = { workspace = true }
+treasurechest = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+
+thiserror = { workspace = true }
+
+cosmwasm-schema = { workspace = true }
+[dev-dependencies]
+cosmwasm-storage = { workspace = true }

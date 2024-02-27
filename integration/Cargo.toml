@@ -1,0 +1,26 @@
+[package]
+name = "integration"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+cw2 = { workspace = true }
+cw-storage-plus = { workspace = true }
+cosmwasm-std = { workspace = true }
+
+schemars = { workspace = true }
+serde = { workspace = true }
+treasurechest={workspace=true }
+treasurechest-contract={path = "../contracts/treasurechest-contract"}
+[dev-dependencies]
+cw-multi-test = { workspace = true}

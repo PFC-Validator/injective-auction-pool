@@ -1,0 +1,54 @@
+[workspace]
+members = ["contracts/*", "integration", "packages/*"]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.1"
+authors = ["PFC <pfc@pfc.zone>"]
+edition = "2021"
+rust-version = "1.73.0"
+license = "Apache-2.0"
+homepage = "https://pfc.zone"
+repository = "https://github.com/PFC-Validator/pfc-butler"
+documentation = "https://github.com/PFC-Validator/pfc-butler#readme"
+keywords = ["blockchain", "cosmos", "cosmwasm"]
+
+[workspace.dependencies]
+
+cw-ownable = "0.5"
+cw-ownable-derive = "0.5.1"
+
+cosmwasm-schema = "1.5.3"
+cosmwasm-std = { version = "1.5.3", features = [
+  # Kuji is  @ 1.2
+  "cosmwasm_1_2",
+  "iterator",
+  "stargate"
+] }
+cw-storage-plus = "1.2.0"
+cosmwasm-storage = "1.5.2"
+cw2 = "1.1.2"
+schemars = "0.8.16"
+serde = { version = "1.0.196", default-features = false, features = ["derive"] }
+thiserror = { version = "1.0.56" }
+treasurechest = { path = "packages/treasurechest" }
+cw-multi-test = { version="0.20.0" , features = ["cosmwasm_1_2"] }
+pfc-whitelist = "1.4.0"
+pfc-whitelist-derive = "1.4.0"
+cw-item-set = "0.7.1"
+cw-utils = "1.0.3"
+osmosis-std-derive = "0.15.3"
+prost = { version = "0.12.3", default-features = false, features = ["prost-derive"] }
+prost-types = { version = "0.12.3", default-features = false }
+protobuf = { version = "3.3.0", features = ["with-bytes"] }
+getrandom = { version = "0.2", features = ["js"] }
+[profile.release]
+codegen-units = 1
+debug = false
+debug-assertions = false
+incremental = false
+lto = true
+opt-level = 3
+overflow-checks = true
+rpath = false
+panic = 'abort'
