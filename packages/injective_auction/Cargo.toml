@@ -1,0 +1,25 @@
+[package]
+name = "injective_auction"
+description = "Common types and traits for the injective auction module"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+documentation = { workspace = true }
+keywords = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+serde = {workspace=true}
+schemars = {workspace=true }
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+thiserror = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+osmosis-std-derive = {workspace=true}
+
+[dev-dependencies]
+protobuf = { workspace = true }

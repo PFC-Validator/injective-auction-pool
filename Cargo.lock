@@ -486,6 +486,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "injective-auction-pool"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "injective_auction",
+ "prost",
+ "schemars",
+ "serde",
+ "thiserror",
+ "treasurechest",
+]
+
+[[package]]
+name = "injective_auction"
+version = "0.0.1"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "osmosis-std-derive",
+ "prost",
+ "prost-types",
+ "protobuf",
+ "schemars",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "integration"
 version = "0.0.1"
 dependencies = [
