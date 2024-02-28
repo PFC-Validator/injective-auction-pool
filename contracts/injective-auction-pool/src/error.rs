@@ -29,4 +29,10 @@ pub enum ContractError {
 
     #[error("Couldn't parse the current auction query response")]
     CurrentAuctionQueryError,
+
+    #[error("Cannot bid")]
+    CannotBid,
+
+    #[error("No bids found for the current auction round")]
+    NoBidsFound,
 }

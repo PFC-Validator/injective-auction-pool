@@ -1,8 +1,7 @@
-use cosmwasm_std::entry_point;
-use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response, StdResult};
+use cosmwasm_std::{entry_point, Addr};
+use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw2::set_contract_version;
 
-use injective_auction::auction::QueryCurrentAuctionBasketResponse;
 use injective_auction::auction_pool::{Config, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::error::ContractError;
@@ -22,12 +21,18 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
+    let whitelisted_addresses: Vec<Addr> = msg
+        .bot_address
+        .iter()
+        .map(|addr| deps.api.addr_validate(addr))
+        .collect::<Result<_, _>>()?;
+
     CONFIG.save(
         deps.storage,
         &Config {
             rewards_fee: validate_rewards_fee(msg.rewards_fee)?,
             rewards_fee_addr: deps.api.addr_validate(&msg.rewards_fee_addr)?,
-            bot_address: deps.api.addr_validate(&msg.bot_address)?,
+            whitelisted_addresses,
         },
     )?;
 
@@ -49,7 +54,10 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::TryBid {} => executions::try_bid(deps, env, info),
+        ExecuteMsg::TryBid {
+            auction_round,
+            basket_value,
+        } => executions::try_bid(deps, env, info, auction_round, basket_value),
         ExecuteMsg::JoinPool {
             auction_round: auction_id,
         } => executions::join_pool(deps, env, info, auction_id),

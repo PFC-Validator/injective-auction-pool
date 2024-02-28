@@ -14,12 +14,12 @@ pub(crate) fn validate_rewards_fee(rewards_fee: Decimal) -> Result<Decimal, Cont
 pub(crate) fn query_current_auction(
     deps: Deps,
 ) -> Result<QueryCurrentAuctionBasketResponse, ContractError> {
-    todo!();
-
-    //todo fix deserialization
+    // TODO: fix deserialization
     let current_auction_basket_response: QueryCurrentAuctionBasketResponse =
         deps.querier.query(&QueryRequest::Stargate {
             path: "/injective.auction.v1beta1.QueryCurrentAuctionBasketRequest".to_string(),
             data: [].into(),
         })?;
+
+    Ok(current_auction_basket_response)
 }
