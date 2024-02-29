@@ -1,4 +1,4 @@
-use cosmwasm_std::StdError;
+use cosmwasm_std::{OverflowError, StdError};
 use cw_utils::PaymentError;
 use thiserror::Error;
 
@@ -35,4 +35,13 @@ pub enum ContractError {
 
     #[error("No bids found for the current auction round")]
     NoBidsFound,
+
+    #[error("Auction round has not finished")]
+    AuctionRoundHasNotFinished,
+
+    #[error("Max bid percentage must be between 0 and 100 percent")]
+    InvalidMaxBidPercentage,
+
+    #[error("Overflow error: {0}")]
+    OverflowError(#[from] OverflowError),
 }
