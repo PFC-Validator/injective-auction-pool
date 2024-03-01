@@ -1,4 +1,6 @@
-use cosmwasm_std::{entry_point, Addr, Decimal, Uint128};
+use std::str::FromStr;
+
+use cosmwasm_std::{entry_point, Addr, Coin, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw2::set_contract_version;
 
@@ -6,8 +8,8 @@ use injective_auction::auction_pool::{Config, ExecuteMsg, InstantiateMsg, QueryM
 
 use crate::error::ContractError;
 use crate::executions::{self, settle_auction};
-use crate::helpers::{query_current_auction, validate_rewards_fee};
-use crate::state::{BIDDING_BALANCE, CONFIG, CURRENT_AUCTION_ROUND};
+use crate::helpers::{query_current_auction, validate_percentage};
+use crate::state::{Auction, BIDDING_BALANCE, CONFIG, CURRENT_AUCTION};
 
 const CONTRACT_NAME: &str = "crates.io:injective-auction-pool";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -15,7 +17,7 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[entry_point]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
@@ -27,31 +29,52 @@ pub fn instantiate(
         .map(|addr| deps.api.addr_validate(addr))
         .collect::<Result<Vec<Addr>, _>>()?;
 
-    let current_auction_round = query_current_auction(deps.as_ref())?
-        .auction_round
-        .ok_or(ContractError::CurrentAuctionQueryError)?;
-
-    CURRENT_AUCTION_ROUND.save(deps.storage, &current_auction_round)?;
-
-    if msg.min_bid_percentage > Decimal::percent(100) {
-        return Err(ContractError::InvalidMaxBidPercentage);
-    }
-
     CONFIG.save(
         deps.storage,
         &Config {
-            rewards_fee: validate_rewards_fee(msg.rewards_fee)?,
+            native_denom: msg.native_denom,
+            token_factory_type: msg.token_factory_type.clone(),
+            rewards_fee: validate_percentage(msg.rewards_fee)?,
             rewards_fee_addr: deps.api.addr_validate(&msg.rewards_fee_addr)?,
             whitelisted_addresses,
-            min_bid_percentage: msg.min_bid_percentage,
+            min_next_bid_increment_rate: validate_percentage(msg.min_next_bid_increment_rate)?,
+            treasury_chest_code_id: msg.treasury_chest_code_id,
+        },
+    )?;
+
+    // fetch current auction details and save them in the contract state
+    let current_auction_round_response = query_current_auction(deps.as_ref())?;
+
+    let auction_round = current_auction_round_response
+        .auction_round
+        .ok_or(ContractError::CurrentAuctionQueryError)?;
+
+    let basket = current_auction_round_response
+        .amount
+        .iter()
+        .map(|coin| Coin {
+            amount: Uint128::from_str(&coin.amount).expect("Failed to parse coin amount"),
+            denom: coin.denom.clone(),
+        })
+        .collect();
+
+    CURRENT_AUCTION.save(
+        deps.storage,
+        &Auction {
+            basket,
+            auction_round,
+            closing_time: current_auction_round_response.auction_closing_time(),
         },
     )?;
 
     BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
-    //todo mint lp for current auction
+    // create a new denom for the current auction round
+    let msg = msg
+        .token_factory_type
+        .create_denom(env.contract.address.clone(), auction_round.to_string().as_str());
 
-    Ok(Response::default())
+    Ok(Response::default().add_message(msg))
 }
 
 #[entry_point]

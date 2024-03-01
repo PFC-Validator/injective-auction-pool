@@ -1,12 +1,16 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Decimal, Uint128};
+use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 #[cw_serde]
 pub struct InstantiateMsg {
+    pub native_denom: String,
+    pub token_factory_type: TokenFactoryType,
     pub rewards_fee: Decimal,
     pub rewards_fee_addr: String,
     pub whitelisted_addresses: Vec<String>,
-    pub min_bid_percentage: Decimal,
+    pub min_next_bid_increment_rate: Decimal,
+    pub treasury_chest_code_id: u64,
 }
 
 #[cw_serde]
@@ -44,12 +48,18 @@ pub enum QueryMsg {}
 #[cw_serde]
 /// Config of the contract
 pub struct Config {
-    /// Percentage of the rewards that the rewards fee address will take
+    /// Contract native denom
+    pub native_denom: String,
+    /// Token Factory Type for the contract
+    pub token_factory_type: TokenFactoryType,
+    /// Percentage of the rewards that the rewards fee address will take. Value is between 0 and 1
     pub rewards_fee: Decimal,
     /// Address to receive the rewards fee
     pub rewards_fee_addr: Addr,
     /// Addresses that are allowed to bid on the auction
     pub whitelisted_addresses: Vec<Addr>,
-    /// Maximum bid percentage of the basket's total value
-    pub min_bid_percentage: Decimal,
+    /// Minimum next bid increment rate for the auction
+    pub min_next_bid_increment_rate: Decimal,
+    /// Treasury chest code id to instantiate a new treasury chest contract
+    pub treasury_chest_code_id: u64,
 }
