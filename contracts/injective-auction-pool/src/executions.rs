@@ -18,6 +18,7 @@ pub(crate) fn join_pool(
     env: Env,
     info: MessageInfo,
     auction_round: u64,
+    max_allowed_bid: Uint128,
 ) -> Result<Response, ContractError> {
     //todo ?Will reject funds once pool is above the current reward pool price?)
 
@@ -58,17 +59,12 @@ pub(crate) fn join_pool(
 
     BIDDING_BALANCE.update::<_, ContractError>(deps.storage, |balance| Ok(balance + amount))?;
 
-    // TODO: define how this basket value is going to be calculated,
-    // either passed as an argument to the function or queried from a DEX.
-    // for now, we are using a dummy value of 0 to please the compiler
-    let basket_value = Uint128::zero();
-
     // try to bid on the auction if possible
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
         msg: to_json_binary(&TryBid {
             auction_round,
-            basket_value,
+            max_allowed_bid,
         })?,
         funds: vec![],
     }));

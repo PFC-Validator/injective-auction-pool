@@ -19,14 +19,15 @@ pub enum ExecuteMsg {
     TryBid {
         /// The auction round to bid on
         auction_round: u64,
-        /// The value of the basket to bid on, denominated in uINJ
-        basket_value: Uint128,
+        /// The maximum allowed bid the contract can make in the auction
+        max_allowed_bid: Uint128,
     },
     /// Called by the user to join the pooled auction .
     JoinPool {
-        //pub reward_pool_value: Uint128,
         /// The auction round to join
         auction_round: u64,
+        /// The maximum allowed bid the contract can make in the auction
+        max_allowed_bid: Uint128,
     },
     /// Can be called by the user before T-1 day from auction's end to exit the auction.
     ExitPool {},

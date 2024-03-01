@@ -87,11 +87,12 @@ pub fn execute(
     match msg {
         ExecuteMsg::TryBid {
             auction_round,
-            basket_value,
-        } => executions::try_bid(deps, env, info, auction_round, basket_value),
+            max_allowed_bid,
+        } => executions::try_bid(deps, env, info, auction_round, max_allowed_bid),
         ExecuteMsg::JoinPool {
-            auction_round: auction_id,
-        } => executions::join_pool(deps, env, info, auction_id),
+            auction_round,
+            max_allowed_bid,
+        } => executions::join_pool(deps, env, info, auction_round, max_allowed_bid),
         ExecuteMsg::ExitPool {} => executions::exit_pool(deps, env, info),
         ExecuteMsg::SettleAuction {
             auction_round,
