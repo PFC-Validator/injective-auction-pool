@@ -4,11 +4,12 @@ use crate::helpers::query_current_auction;
 use crate::state::{Auction, BIDDING_BALANCE, CONFIG, CURRENT_AUCTION, TREASURE_CHEST_CONTRACTS};
 use crate::ContractError;
 use cosmwasm_std::{
-    coins, ensure, to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Env,
+    coins, ensure, to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut, Env,
     MessageInfo, OverflowError, Response, Uint128, WasmMsg,
 };
+use injective_auction::auction::MsgBid;
 use injective_auction::auction_pool::ExecuteMsg::TryBid;
-use treasurechest::tf::tokenfactory::TokenFactoryType;
+use prost::Message;
 
 const DAY_IN_SECONDS: u64 = 86400;
 
@@ -20,10 +21,7 @@ pub(crate) fn join_pool(
     auction_round: u64,
     basket_value: Uint128,
 ) -> Result<Response, ContractError> {
-    //todo ?Will reject funds once pool is above the current reward pool price?)
-
     let config = CONFIG.load(deps.storage)?;
-
     let amount = cw_utils::must_pay(&info, &config.native_denom)?;
 
     let current_auction_round = query_current_auction(deps.as_ref())?
@@ -31,25 +29,24 @@ pub(crate) fn join_pool(
         .ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the user from joining the pool if the auction round is over
-    ensure!(
-        current_auction_round == auction_round,
-        ContractError::InvalidAuctionRound {
+    if auction_round != current_auction_round {
+        return Err(ContractError::InvalidAuctionRound {
             current_auction_round,
-            auction_round
-        }
-    );
+            auction_round,
+        });
+    }
 
     let mut messages = vec![];
 
-    let lp_subdenom = CURRENT_AUCTION.load(deps.storage)?.lp_subdenom;
-
     // mint the lp token and send it to the user
+    let lp_subdenom = CURRENT_AUCTION.load(deps.storage)?.lp_subdenom;
     messages.push(config.token_factory_type.mint(
         env.contract.address.clone(),
         lp_subdenom.to_string().as_str(),
         amount,
     ));
 
+    // send the minted lp token to the user
     let lp_denom = format!("factory/{}/{}", env.contract.address, lp_subdenom);
     messages.push(
         BankMsg::Send {
@@ -59,6 +56,7 @@ pub(crate) fn join_pool(
         .into(),
     );
 
+    // increase the balance that can be used for bidding
     BIDDING_BALANCE
         .update::<_, ContractError>(deps.storage, |balance| Ok(balance.checked_add(amount)?))?;
 
@@ -140,26 +138,22 @@ pub(crate) fn try_bid(
     auction_round: u64,
     basket_value: Uint128,
 ) -> Result<Response, ContractError> {
-    let current_auction_round_response = query_current_auction(deps.as_ref())?;
-
-    // prevents the contract from bidding on the wrong auction round
-    if auction_round
-        != current_auction_round_response
-            .auction_round
-            .ok_or(ContractError::CurrentAuctionQueryError)?
-    {
-        return Err(ContractError::InvalidAuctionRound {
-            current_auction_round: current_auction_round_response
-                .auction_round
-                .ok_or(ContractError::CurrentAuctionQueryError)?,
-            auction_round,
-        });
-    }
-
     // only whitelist addresses or the contract itself can bid on the auction
     let config = CONFIG.load(deps.storage)?;
     if info.sender != env.contract.address || !config.whitelisted_addresses.contains(&info.sender) {
         return Err(ContractError::Unauthorized {});
+    }
+    let current_auction_round_response = query_current_auction(deps.as_ref())?;
+    let current_auction_round = current_auction_round_response
+        .auction_round
+        .ok_or(ContractError::CurrentAuctionQueryError)?;
+
+    // prevents the contract from bidding on the wrong auction round
+    if auction_round != current_auction_round {
+        return Err(ContractError::InvalidAuctionRound {
+            current_auction_round,
+            auction_round,
+        });
     }
 
     // prevents the contract from bidding if the contract is already the highest bidder
@@ -169,19 +163,51 @@ pub(crate) fn try_bid(
             .add_attribute("reason", "contract_is_already_the_highest_bidder"));
     }
 
-    // prevents the contract from bidding if the current bid is higher than the basket value
-    let current_bid_amount: Uint128 =
-        current_auction_round_response.highest_bid_amount.unwrap_or(0.to_string()).parse()?;
+    // calculate the minimum allowed bid to not be rejected by the auction module
+    // minimum_allowed_bid = (highest_bid_amount * (1 + min_next_bid_increment_rate)) + 1
+    let minimum_allowed_bid = current_auction_round_response
+        .highest_bid_amount
+        .unwrap_or(0.to_string())
+        .parse::<Decimal>()?
+        .checked_mul((Decimal::one().checked_add(config.min_next_bid_increment_rate))?)?
+        .to_uint_ceil()
+        .checked_add(Uint128::one())?;
 
-    if current_bid_amount >= basket_value {
+    // prevents the contract from bidding if the minimum allowed bid is higher than bidding balance
+    let bidding_balance: Uint128 = BIDDING_BALANCE.load(deps.storage)?;
+    if minimum_allowed_bid > bidding_balance {
         return Ok(Response::default()
             .add_attribute("action", "did_not_bid")
-            .add_attribute("reason", "bid_is_higher_than_basket_amount"));
+            .add_attribute("reason", "minimum_allowed_bid_is_higher_than_bidding_balance"));
     }
 
-    // TODO: continue with the bidding process
+    // prevents the contract from bidding if the returns are not high enough
+    if basket_value * (Decimal::one() - config.min_return) > minimum_allowed_bid {
+        return Ok(Response::default()
+            .add_attribute("action", "did_not_bid")
+            .add_attribute("reason", "basket_value_is_not_worth_bidding_for"));
+    }
 
-    Ok(Response::default().add_attributes(vec![("action", "try_bid".to_string())]))
+    // TODO: need to send some funds here?
+    let message: CosmosMsg = CosmosMsg::Stargate {
+        type_url: "/injective.auction.v1beta1.MsgBid".to_string(),
+        value: {
+            let msg = MsgBid {
+                sender: env.contract.address.to_string(),
+                bid_amount: Some(injective_auction::auction::Coin {
+                    denom: config.native_denom,
+                    amount: minimum_allowed_bid.to_string(),
+                }),
+                round: auction_round,
+            };
+            Binary(msg.encode_to_vec())
+        },
+    };
+
+    Ok(Response::default()
+        .add_message(message)
+        .add_attribute("action", "try_bid".to_string())
+        .add_attribute("amount", minimum_allowed_bid.to_string()))
 }
 
 pub fn settle_auction(
@@ -271,7 +297,7 @@ pub fn settle_auction(
                 denom: config.native_denom.clone(),
                 owner: env.contract.address.to_string(),
                 notes: "".to_string(),
-                token_factory: TokenFactoryType::Injective.to_string(),
+                token_factory: config.token_factory_type.to_string(),
                 burn_it: Some(false),
             })?,
             funds: basket_to_treasure_chest,

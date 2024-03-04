@@ -14,7 +14,7 @@ use osmosis_std_derive::CosmwasmExt;
     schemars::JsonSchema,
     CosmwasmExt,
 )]
-#[proto_message(type_url = "/cosmos.base.v1beta1.Coin")]
+#[proto_message(type_url = "/injective.base.v1beta1.Coin")]
 pub struct Coin {
     #[prost(string, tag = "1")]
     pub denom: ::prost::alloc::string::String,
@@ -73,7 +73,7 @@ pub struct QueryCurrentAuctionBasketResponse {
 pub struct MsgBid {
     #[prost(string, tag = "1")]
     pub sender: ::prost::alloc::string::String,
-    #[prost(message, tag = "2")]
+    #[prost(message, optional, tag = "2")]
     pub bid_amount: ::core::option::Option<Coin>,
     #[prost(uint64, tag = "3")]
     pub round: u64,
