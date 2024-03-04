@@ -86,15 +86,16 @@ pub(crate) fn exit_pool(
 ) -> Result<Response, ContractError> {
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
 
+    //make sure the user sends a correct amount and denom to exit the pool
     let lp_denom = format!(
         "factory/{}/{}",
         env.contract.address,
-        current_auction_round_response
-            .auction_round
-            .ok_or(ContractError::CurrentAuctionQueryError)?
+        CURRENT_AUCTION.load(deps.storage)?.lp_subdenom
     );
     let amount = cw_utils::must_pay(&info, lp_denom.as_str())?;
 
+    // TODO: change this to if statement to be consistent with the rest of the code
+    // prevents the user from exiting the pool in the last day of the auction
     ensure!(
         DAY_IN_SECONDS
             > current_auction_round_response
@@ -112,7 +113,7 @@ pub(crate) fn exit_pool(
 
     let mut messages = vec![];
 
-    // burn the lp token and send the inj back to the user
+    // burn the LP token and send the inj back to the user
     messages.push(config.token_factory_type.burn(
         env.contract.address.clone(),
         lp_denom.as_str(),
@@ -236,11 +237,9 @@ pub fn settle_auction(
         return Err(ContractError::AuctionRoundHasNotFinished);
     }
 
-    // ################################
-    // ### CONTRACT WON THE AUCTION ###
-    // ################################
+    // the contract won the auction
     if auction_winner == env.contract.address.to_string() {
-        // update lp subdenom
+        // update LP subdenom for the next auction round (increment by 1)
         let new_subdenom = previous_auction.lp_subdenom.checked_add(1).ok_or(
             ContractError::OverflowError(OverflowError {
                 operation: cosmwasm_std::OverflowOperation::Add,
@@ -253,7 +252,7 @@ pub fn settle_auction(
         let mut basket_fees = vec![];
         let mut basket_to_treasure_chest = vec![];
 
-        // add the unused bidding balance to the basket, so it can be redeemed later
+        // add the unused bidding balance to the basket to be redeemed later
         // TODO: should this be taxed though? if not, move after the for loop
         let remaining_bidding_balance =
             BIDDING_BALANCE.load(deps.storage)?.checked_sub(auction_winning_bid)?;
@@ -316,7 +315,7 @@ pub fn settle_auction(
             &treasure_chest_contract_address,
         )?;
 
-        // transfer previous token factory token's admin rights to treasury chest contract
+        // transfer previous token factory's admin rights to the treasury chest contract
         messages.push(config.token_factory_type.change_admin(
             env.contract.address.clone(),
             format!("factory/{}/{}", env.contract.address, previous_auction.lp_subdenom).as_str(),
@@ -333,11 +332,10 @@ pub fn settle_auction(
         Ok(Response::default()
             .add_messages(messages)
             .add_attributes(vec![("action", "settle_auction".to_string())]))
-    } else {
-        // #################################
-        // ### CONTRACT LOST THE AUCTION ###
-        // #################################
-        // save the current auction details to the contract state
+    }
+    // the contract did not win the auction
+    else {
+        // save the current auction details to the contract state, keeping the previous LP subdenom
         CURRENT_AUCTION.save(
             deps.storage,
             &Auction {
