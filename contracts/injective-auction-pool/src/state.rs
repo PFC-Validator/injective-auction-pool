@@ -7,6 +7,7 @@ use injective_auction::auction_pool::Config;
 pub struct Auction {
     pub basket: Vec<Coin>,
     pub auction_round: u64,
+    pub lp_subdenom: u64,
     pub closing_time: u64,
 }
 

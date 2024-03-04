@@ -39,6 +39,7 @@ pub fn instantiate(
             whitelisted_addresses,
             min_next_bid_increment_rate: validate_percentage(msg.min_next_bid_increment_rate)?,
             treasury_chest_code_id: msg.treasury_chest_code_id,
+            min_return: validate_percentage(msg.min_return)?,
         },
     )?;
 
@@ -63,6 +64,7 @@ pub fn instantiate(
         &Auction {
             basket,
             auction_round,
+            lp_subdenom: 0,
             closing_time: current_auction_round_response.auction_closing_time(),
         },
     )?;
@@ -72,7 +74,7 @@ pub fn instantiate(
     // create a new denom for the current auction round
     let msg = msg
         .token_factory_type
-        .create_denom(env.contract.address.clone(), auction_round.to_string().as_str());
+        .create_denom(env.contract.address.clone(), "0");
 
     Ok(Response::default().add_message(msg))
 }
@@ -87,12 +89,12 @@ pub fn execute(
     match msg {
         ExecuteMsg::TryBid {
             auction_round,
-            max_allowed_bid,
-        } => executions::try_bid(deps, env, info, auction_round, max_allowed_bid),
+            basket_value,
+        } => executions::try_bid(deps, env, info, auction_round, basket_value),
         ExecuteMsg::JoinPool {
             auction_round,
-            max_allowed_bid,
-        } => executions::join_pool(deps, env, info, auction_round, max_allowed_bid),
+            basket_value,
+        } => executions::join_pool(deps, env, info, auction_round, basket_value),
         ExecuteMsg::ExitPool {} => executions::exit_pool(deps, env, info),
         ExecuteMsg::SettleAuction {
             auction_round,

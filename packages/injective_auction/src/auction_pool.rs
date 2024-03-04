@@ -11,6 +11,7 @@ pub struct InstantiateMsg {
     pub whitelisted_addresses: Vec<String>,
     pub min_next_bid_increment_rate: Decimal,
     pub treasury_chest_code_id: u64,
+    pub min_return: Decimal,
 }
 
 #[cw_serde]
@@ -19,15 +20,15 @@ pub enum ExecuteMsg {
     TryBid {
         /// The auction round to bid on
         auction_round: u64,
-        /// The maximum allowed bid the contract can make in the auction
-        max_allowed_bid: Uint128,
+        /// The value in native denom of all assets being auctioned
+        basket_value: Uint128,
     },
     /// Called by the user to join the pooled auction .
     JoinPool {
         /// The auction round to join
         auction_round: u64,
-        /// The maximum allowed bid the contract can make in the auction
-        max_allowed_bid: Uint128,
+        /// The value in native denom of all assets being auctioned
+        basket_value: Uint128,
     },
     /// Can be called by the user before T-1 day from auction's end to exit the auction.
     ExitPool {},
@@ -63,4 +64,6 @@ pub struct Config {
     pub min_next_bid_increment_rate: Decimal,
     /// Treasury chest code id to instantiate a new treasury chest contract
     pub treasury_chest_code_id: u64,
+    /// The minimum return allowed in percentage. 5% means the contract cannot bid for more than 95% of the basket value
+    pub min_return: Decimal,
 }

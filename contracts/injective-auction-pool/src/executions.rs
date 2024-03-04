@@ -5,7 +5,7 @@ use crate::state::{Auction, BIDDING_BALANCE, CONFIG, CURRENT_AUCTION, TREASURE_C
 use crate::ContractError;
 use cosmwasm_std::{
     coins, ensure, to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Env,
-    MessageInfo, Response, Uint128, WasmMsg,
+    MessageInfo, OverflowError, Response, Uint128, WasmMsg,
 };
 use injective_auction::auction_pool::ExecuteMsg::TryBid;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
@@ -18,7 +18,7 @@ pub(crate) fn join_pool(
     env: Env,
     info: MessageInfo,
     auction_round: u64,
-    max_allowed_bid: Uint128,
+    basket_value: Uint128,
 ) -> Result<Response, ContractError> {
     //todo ?Will reject funds once pool is above the current reward pool price?)
 
@@ -41,14 +41,16 @@ pub(crate) fn join_pool(
 
     let mut messages = vec![];
 
+    let lp_subdenom = CURRENT_AUCTION.load(deps.storage)?.lp_subdenom;
+
     // mint the lp token and send it to the user
-    messages.push(TokenFactoryType::Injective.mint(
+    messages.push(config.token_factory_type.mint(
         env.contract.address.clone(),
-        auction_round.to_string().as_str(),
+        lp_subdenom.to_string().as_str(),
         amount,
     ));
 
-    let lp_denom = format!("factory/{}/{}", env.contract.address, current_auction_round);
+    let lp_denom = format!("factory/{}/{}", env.contract.address, lp_subdenom);
     messages.push(
         BankMsg::Send {
             to_address: info.sender.to_string(),
@@ -57,14 +59,15 @@ pub(crate) fn join_pool(
         .into(),
     );
 
-    BIDDING_BALANCE.update::<_, ContractError>(deps.storage, |balance| Ok(balance + amount))?;
+    BIDDING_BALANCE
+        .update::<_, ContractError>(deps.storage, |balance| Ok(balance.checked_add(amount)?))?;
 
     // try to bid on the auction if possible
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
         msg: to_json_binary(&TryBid {
             auction_round,
-            max_allowed_bid,
+            basket_value,
         })?,
         funds: vec![],
     }));
@@ -112,7 +115,7 @@ pub(crate) fn exit_pool(
     let mut messages = vec![];
 
     // burn the lp token and send the inj back to the user
-    messages.push(TokenFactoryType::Injective.burn(
+    messages.push(config.token_factory_type.burn(
         env.contract.address.clone(),
         lp_denom.as_str(),
         amount,
@@ -189,36 +192,37 @@ pub fn settle_auction(
     auction_winner: String,
     auction_winning_bid: Uint128,
 ) -> Result<Response, ContractError> {
-    // only whitelist addresses can settle the auction for now,
-    // until the contract can query the aunction module for a specific auction round
+    // only whitelist addresses can settle the auction for now until the
+    // contract can query the aunction module for a specific auction round
     let config = CONFIG.load(deps.storage)?;
     if !config.whitelisted_addresses.contains(&info.sender) {
         return Err(ContractError::Unauthorized {});
     }
 
-    // loads from storage the previous auction details
     let previous_auction = CURRENT_AUCTION.load(deps.storage)?;
-
-    // queries the current auction details
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
-
-    // prevents the contract from settling the auction if the auction round has not finished
     let current_auction_round = current_auction_round_response
         .auction_round
         .ok_or(ContractError::CurrentAuctionQueryError)?;
 
+    // prevents the contract from settling the auction if the auction round has not finished
     if current_auction_round == previous_auction.auction_round {
         return Err(ContractError::AuctionRoundHasNotFinished);
     }
 
-    let mut messages: Vec<CosmosMsg> = vec![];
-
     // ################################
     // ### CONTRACT WON THE AUCTION ###
     // ################################
-    //
-    // transfer the basket of assets received to the treasury chest contract
     if auction_winner == env.contract.address.to_string() {
+        // update lp subdenom
+        let new_subdenom = previous_auction.lp_subdenom.checked_add(1).ok_or(
+            ContractError::OverflowError(OverflowError {
+                operation: cosmwasm_std::OverflowOperation::Add,
+                operand1: previous_auction.lp_subdenom.to_string(),
+                operand2: 1.to_string(),
+            }),
+        )?;
+
         let basket = previous_auction.basket;
         let mut basket_fees = vec![];
         let mut basket_to_treasure_chest = vec![];
@@ -251,6 +255,8 @@ pub fn settle_auction(
         // reset the bidding balance to 0 if we won, otherwise keep the balance for the next round
         BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
+        let mut messages: Vec<CosmosMsg> = vec![];
+
         // transfer corresponding tokens to the rewards fee address
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             to_address: config.rewards_fee_addr.to_string(),
@@ -268,8 +274,8 @@ pub fn settle_auction(
                 token_factory: TokenFactoryType::Injective.to_string(),
                 burn_it: Some(false),
             })?,
-            funds: vec![],
-            label: "".to_string(),
+            funds: basket_to_treasure_chest,
+            label: format!("Treasure chest for auction round {}", previous_auction.auction_round),
             // TODO: fix this
             salt: Binary::from_base64("")?,
         }));
@@ -285,38 +291,48 @@ pub fn settle_auction(
         )?;
 
         // transfer previous token factory token's admin rights to treasury chest contract
-        messages.push(TokenFactoryType::Injective.change_admin(
+        messages.push(config.token_factory_type.change_admin(
             env.contract.address.clone(),
-            format!("factory/{}/{}", env.contract.address, previous_auction.auction_round).as_str(),
+            format!("factory/{}/{}", env.contract.address, previous_auction.lp_subdenom).as_str(),
             treasure_chest_contract_address,
         ));
+
+        // create a new denom for the current auction round
+        messages.push(
+            config
+                .token_factory_type
+                .create_denom(env.contract.address, new_subdenom.to_string().as_str()),
+        );
+
+        Ok(Response::default()
+            .add_messages(messages)
+            .add_attributes(vec![("action", "settle_auction".to_string())]))
+    } else {
+        // #################################
+        // ### CONTRACT LOST THE AUCTION ###
+        // #################################
+        // save the current auction details to the contract state
+        CURRENT_AUCTION.save(
+            deps.storage,
+            &Auction {
+                basket: current_auction_round_response
+                    .amount
+                    .iter()
+                    .map(|coin| Coin {
+                        amount: Uint128::from_str(&coin.amount)
+                            .expect("Failed to parse coin amount"),
+                        denom: coin.denom.clone(),
+                    })
+                    .collect(),
+                auction_round: current_auction_round,
+                lp_subdenom: previous_auction.lp_subdenom,
+                closing_time: current_auction_round_response.auction_closing_time(),
+            },
+        )?;
+
+        Ok(Response::default()
+            .add_attribute("action", "settle_auction".to_string())
+            .add_attribute("previous_action_round", previous_auction.auction_round.to_string())
+            .add_attribute("current_action_round", current_auction_round.to_string()))
     }
-
-    // create a new denom for the current auction round
-    messages.push(
-        config
-            .token_factory_type
-            .create_denom(env.contract.address.clone(), current_auction_round.to_string().as_str()),
-    );
-
-    // save the current auction details to the contract state
-    CURRENT_AUCTION.save(
-        deps.storage,
-        &Auction {
-            basket: current_auction_round_response
-                .amount
-                .iter()
-                .map(|coin| Coin {
-                    amount: Uint128::from_str(&coin.amount).expect("Failed to parse coin amount"),
-                    denom: coin.denom.clone(),
-                })
-                .collect(),
-            auction_round: current_auction_round,
-            closing_time: current_auction_round_response.auction_closing_time(),
-        },
-    )?;
-
-    Ok(Response::default()
-        .add_messages(messages)
-        .add_attributes(vec![("action", "settle_auction".to_string())]))
 }
