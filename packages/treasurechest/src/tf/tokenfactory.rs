@@ -157,6 +157,37 @@ impl TokenFactoryType {
         }
     }
 
+    pub fn create_denom(&self, address: Addr, subdenom: &str) -> CosmosMsg {
+        match self {
+            TokenFactoryType::CosmWasm => <cosmos::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+                cosmos::denom::MsgCreateDenom {
+                    sender: address.to_string(),
+                    subdenom: subdenom.to_string(),
+                },
+            ),
+            TokenFactoryType::Kujira => <kujira::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+                kujira::denom::MsgCreateDenom {
+                    sender: address.to_string(),
+                    subdenom: subdenom.to_string(),
+                },
+            ),
+            TokenFactoryType::Injective => {
+                <injective::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+                    injective::denom::MsgCreateDenom {
+                        sender: address.to_string(),
+                        subdenom: subdenom.to_string(),
+                    },
+                )
+            },
+            TokenFactoryType::Osmosis => <osmosis::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+                osmosis::denom::MsgCreateDenom {
+                    sender: address.to_string(),
+                    subdenom: subdenom.to_string(),
+                },
+            ),
+        }
+    }
+
     pub fn admin_path(&self) -> String {
         match self {
             TokenFactoryType::CosmWasm => "/cosmwasm.tokenfactory.v1.Query/DenomInfo",

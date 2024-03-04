@@ -516,6 +516,7 @@ dependencies = [
  "schemars",
  "serde",
  "thiserror",
+ "treasurechest",
 ]
 
 [[package]]

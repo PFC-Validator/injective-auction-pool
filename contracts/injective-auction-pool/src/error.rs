@@ -1,4 +1,4 @@
-use cosmwasm_std::StdError;
+use cosmwasm_std::{Decimal, OverflowError, StdError};
 use cw_utils::PaymentError;
 use thiserror::Error;
 
@@ -13,8 +13,10 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
-    #[error("Invalid rewards fee")]
-    InvalidRewardsFee,
+    #[error("Invalid rate: {rate}. Rate must be between 0.0 and 1.0")]
+    InvalidRate {
+        rate: Decimal,
+    },
 
     #[error("Invalid auction round. Current auction round: {current_auction_round}, auction round: {auction_round}")]
     InvalidAuctionRound {
@@ -29,4 +31,19 @@ pub enum ContractError {
 
     #[error("Couldn't parse the current auction query response")]
     CurrentAuctionQueryError,
+
+    #[error("Cannot bid")]
+    CannotBid,
+
+    #[error("No bids found for the current auction round")]
+    NoBidsFound,
+
+    #[error("Auction round has not finished")]
+    AuctionRoundHasNotFinished,
+
+    #[error("Max bid percentage must be between 0 and 100 percent")]
+    InvalidMaxBidPercentage,
+
+    #[error("Overflow error: {0}")]
+    OverflowError(#[from] OverflowError),
 }
