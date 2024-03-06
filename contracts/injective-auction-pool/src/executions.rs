@@ -4,8 +4,8 @@ use crate::helpers::query_current_auction;
 use crate::state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
 use crate::ContractError;
 use cosmwasm_std::{
-    coins, ensure, instantiate2_address, to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse,
-    Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, OverflowError, Response, Uint128, WasmMsg,
+    coins, instantiate2_address, to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse, Coin,
+    CosmosMsg, Decimal, DepsMut, Env, MessageInfo, OverflowError, Response, Uint128, WasmMsg,
 };
 use injective_auction::auction::MsgBid;
 use injective_auction::auction_pool::ExecuteMsg::TryBid;
@@ -94,16 +94,15 @@ pub(crate) fn exit_pool(
     );
     let amount = cw_utils::must_pay(&info, lp_denom.as_str())?;
 
-    // TODO: change this to if statement to be consistent with the rest of the code
     // prevents the user from exiting the pool in the last day of the auction
-    ensure!(
-        DAY_IN_SECONDS
-            > current_auction_round_response
-                .auction_closing_time
-                .ok_or(ContractError::CurrentAuctionQueryError)?
-                .saturating_sub(env.block.time.seconds()),
-        ContractError::PooledAuctionLocked
-    );
+    if current_auction_round_response
+        .auction_closing_time
+        .ok_or(ContractError::CurrentAuctionQueryError)?
+        .saturating_sub(env.block.time.seconds())
+        < DAY_IN_SECONDS
+    {
+        return Err(ContractError::PooledAuctionLocked);
+    }
 
     // subtract the amount of INJ to send from the bidding balance
     BIDDING_BALANCE
