@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
 use crate::helpers::query_current_auction;
-use crate::state::{Auction, BIDDING_BALANCE, CONFIG, CURRENT_AUCTION, TREASURE_CHEST_CONTRACTS};
+use crate::state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
 use crate::ContractError;
 use cosmwasm_std::{
-    coins, ensure, to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut, Env,
-    MessageInfo, OverflowError, Response, Uint128, WasmMsg,
+    coins, ensure, instantiate2_address, to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse,
+    Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, OverflowError, Response, Uint128, WasmMsg,
 };
 use injective_auction::auction::MsgBid;
 use injective_auction::auction_pool::ExecuteMsg::TryBid;
@@ -39,7 +39,7 @@ pub(crate) fn join_pool(
     let mut messages = vec![];
 
     // mint the lp token and send it to the user
-    let lp_subdenom = CURRENT_AUCTION.load(deps.storage)?.lp_subdenom;
+    let lp_subdenom = UNSETTLED_AUCTION.load(deps.storage)?.lp_subdenom;
     messages.push(config.token_factory_type.mint(
         env.contract.address.clone(),
         lp_subdenom.to_string().as_str(),
@@ -90,7 +90,7 @@ pub(crate) fn exit_pool(
     let lp_denom = format!(
         "factory/{}/{}",
         env.contract.address,
-        CURRENT_AUCTION.load(deps.storage)?.lp_subdenom
+        UNSETTLED_AUCTION.load(deps.storage)?.lp_subdenom
     );
     let amount = cw_utils::must_pay(&info, lp_denom.as_str())?;
 
@@ -215,7 +215,7 @@ pub fn settle_auction(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    _auction_round: u64,
+    auction_round: u64,
     auction_winner: String,
     auction_winning_bid: Uint128,
 ) -> Result<Response, ContractError> {
@@ -226,29 +226,38 @@ pub fn settle_auction(
         return Err(ContractError::Unauthorized {});
     }
 
-    let previous_auction = CURRENT_AUCTION.load(deps.storage)?;
+    // prevents the contract from settling the wrong auction round
+    let unsettled_auction = UNSETTLED_AUCTION.load(deps.storage)?;
+
+    if auction_round != unsettled_auction.auction_round {
+        return Err(ContractError::InvalidAuctionRound {
+            current_auction_round: unsettled_auction.auction_round,
+            auction_round,
+        });
+    }
+
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
     let current_auction_round = current_auction_round_response
         .auction_round
         .ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the contract from settling the auction if the auction round has not finished
-    if current_auction_round == previous_auction.auction_round {
+    if current_auction_round == unsettled_auction.auction_round {
         return Err(ContractError::AuctionRoundHasNotFinished);
     }
 
     // the contract won the auction
     if auction_winner == env.contract.address.to_string() {
         // update LP subdenom for the next auction round (increment by 1)
-        let new_subdenom = previous_auction.lp_subdenom.checked_add(1).ok_or(
+        let new_subdenom = unsettled_auction.lp_subdenom.checked_add(1).ok_or(
             ContractError::OverflowError(OverflowError {
                 operation: cosmwasm_std::OverflowOperation::Add,
-                operand1: previous_auction.lp_subdenom.to_string(),
+                operand1: unsettled_auction.lp_subdenom.to_string(),
                 operand2: 1.to_string(),
             }),
         )?;
 
-        let basket = previous_auction.basket;
+        let basket = unsettled_auction.basket;
         let mut basket_fees = vec![];
         let mut basket_to_treasure_chest = vec![];
 
@@ -288,38 +297,56 @@ pub fn settle_auction(
             amount: basket_fees,
         }));
 
-        // instantiate a treasury chest contract
+        // instantiate a treasury chest contract and get the future contract address
+        let creator = deps.api.addr_canonicalize(env.contract.address.as_str())?;
+        let code_id = config.treasury_chest_code_id;
+
+        let CodeInfoResponse {
+            code_id: _,
+            creator: _,
+            checksum,
+            ..
+        } = deps.querier.query_wasm_code_info(code_id)?;
+
+        let seed = format!(
+            "{}{}{}",
+            unsettled_auction.auction_round,
+            info.sender.into_string(),
+            env.block.height
+        );
+        let salt = Binary::from(seed.as_bytes());
+
+        let treasure_chest_address =
+            Addr::unchecked(&instantiate2_address(&checksum, &creator, &salt)?.to_string());
+
+        let denom = format!("factory/{}/{}", env.contract.address, unsettled_auction.lp_subdenom);
+
         messages.push(CosmosMsg::Wasm(WasmMsg::Instantiate2 {
-            admin: Some(env.contract.address.to_string()),
-            code_id: config.treasury_chest_code_id,
+            admin: None,
+            code_id,
+            label: format!("Treasure chest for auction round {}", unsettled_auction.auction_round),
             msg: to_json_binary(&treasurechest::chest::InstantiateMsg {
                 denom: config.native_denom.clone(),
                 owner: env.contract.address.to_string(),
-                notes: "".to_string(),
+                notes: denom.clone(),
                 token_factory: config.token_factory_type.to_string(),
                 burn_it: Some(false),
             })?,
-            funds: basket_to_treasure_chest,
-            label: format!("Treasure chest for auction round {}", previous_auction.auction_round),
-            // TODO: fix this
-            salt: Binary::from_base64("")?,
+            funds: vec![],
+            salt,
         }));
-
-        // TODO: need to (get and) save treasure chest contract address to the contract state
-        let treasure_chest_contract_address =
-            Addr::unchecked("treasure_chest_contract_address_here");
 
         TREASURE_CHEST_CONTRACTS.save(
             deps.storage,
-            previous_auction.auction_round,
-            &treasure_chest_contract_address,
+            unsettled_auction.auction_round,
+            &treasure_chest_address,
         )?;
 
         // transfer previous token factory's admin rights to the treasury chest contract
         messages.push(config.token_factory_type.change_admin(
             env.contract.address.clone(),
-            format!("factory/{}/{}", env.contract.address, previous_auction.lp_subdenom).as_str(),
-            treasure_chest_contract_address,
+            &denom,
+            treasure_chest_address.clone(),
         ));
 
         // create a new denom for the current auction round
@@ -331,12 +358,16 @@ pub fn settle_auction(
 
         Ok(Response::default()
             .add_messages(messages)
-            .add_attributes(vec![("action", "settle_auction".to_string())]))
+            .add_attribute("action", "settle_auction".to_string())
+            .add_attribute("settled_action_round", unsettled_auction.auction_round.to_string())
+            .add_attribute("treasure_chest_address", treasure_chest_address.to_string())
+            .add_attribute("current_action_round", current_auction_round.to_string())
+            .add_attribute("new_subdenom", new_subdenom.to_string()))
     }
-    // the contract did not win the auction
+    // the contract did NOT win the auction
     else {
         // save the current auction details to the contract state, keeping the previous LP subdenom
-        CURRENT_AUCTION.save(
+        UNSETTLED_AUCTION.save(
             deps.storage,
             &Auction {
                 basket: current_auction_round_response
@@ -349,14 +380,14 @@ pub fn settle_auction(
                     })
                     .collect(),
                 auction_round: current_auction_round,
-                lp_subdenom: previous_auction.lp_subdenom,
+                lp_subdenom: unsettled_auction.lp_subdenom,
                 closing_time: current_auction_round_response.auction_closing_time(),
             },
         )?;
 
         Ok(Response::default()
             .add_attribute("action", "settle_auction".to_string())
-            .add_attribute("previous_action_round", previous_auction.auction_round.to_string())
+            .add_attribute("settled_action_round", unsettled_auction.auction_round.to_string())
             .add_attribute("current_action_round", current_auction_round.to_string()))
     }
 }

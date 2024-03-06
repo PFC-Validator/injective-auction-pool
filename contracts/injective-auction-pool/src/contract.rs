@@ -9,7 +9,7 @@ use injective_auction::auction_pool::{Config, ExecuteMsg, InstantiateMsg, QueryM
 use crate::error::ContractError;
 use crate::executions::{self, settle_auction};
 use crate::helpers::{query_current_auction, validate_percentage};
-use crate::state::{Auction, BIDDING_BALANCE, CONFIG, CURRENT_AUCTION};
+use crate::state::{Auction, BIDDING_BALANCE, CONFIG, UNSETTLED_AUCTION};
 
 const CONTRACT_NAME: &str = "crates.io:injective-auction-pool";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -59,7 +59,7 @@ pub fn instantiate(
         })
         .collect();
 
-    CURRENT_AUCTION.save(
+    UNSETTLED_AUCTION.save(
         deps.storage,
         &Auction {
             basket,
@@ -72,9 +72,7 @@ pub fn instantiate(
     BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
     // create a new denom for the current auction round
-    let msg = msg
-        .token_factory_type
-        .create_denom(env.contract.address.clone(), "0");
+    let msg = msg.token_factory_type.create_denom(env.contract.address.clone(), "0");
 
     Ok(Response::default().add_message(msg))
 }

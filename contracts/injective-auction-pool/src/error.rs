@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, OverflowError, StdError};
+use cosmwasm_std::{Decimal, Instantiate2AddressError, OverflowError, StdError};
 use cw_utils::PaymentError;
 use thiserror::Error;
 
@@ -46,4 +46,7 @@ pub enum ContractError {
 
     #[error("Overflow error: {0}")]
     OverflowError(#[from] OverflowError),
+
+    #[error("Instantiate address error: {0}")]
+    Instantiate2AddressError(#[from] Instantiate2AddressError),
 }
