@@ -96,12 +96,14 @@ pub(crate) fn exit_pool(
 
     // prevents the user from exiting the pool in the last day of the auction
     if current_auction_round_response
-        .auction_closing_time
-        .ok_or(ContractError::CurrentAuctionQueryError)?
+        .auction_closing_time()
         .saturating_sub(env.block.time.seconds())
         < DAY_IN_SECONDS
+        && env.block.time.seconds() < current_auction_round_response.auction_closing_time()
     {
-        return Err(ContractError::PooledAuctionLocked);
+        {
+            return Err(ContractError::PooledAuctionLocked);
+        }
     }
 
     // subtract the amount of INJ to send from the bidding balance
