@@ -64,7 +64,7 @@ pub fn instantiate(
         &Auction {
             basket,
             auction_round,
-            lp_subdenom: 0,
+            lp_subdenom: 1,
             closing_time: current_auction_round_response.auction_closing_time(),
         },
     )?;
@@ -72,9 +72,13 @@ pub fn instantiate(
     BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
     // create a new denom for the current auction round
-    let msg = msg.token_factory_type.create_denom(env.contract.address.clone(), "0");
+    let msg = msg.token_factory_type.create_denom(env.contract.address.clone(), "1");
 
-    Ok(Response::default().add_message(msg))
+    Ok(Response::default()
+        .add_message(msg)
+        .add_attribute("action", "instantiate")
+        .add_attribute("auction_round", auction_round.to_string())
+        .add_attribute("lp_subdenom", "1"))
 }
 
 #[entry_point]
