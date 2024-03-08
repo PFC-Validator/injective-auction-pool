@@ -4,7 +4,7 @@ use cosmwasm_std::testing::{
     mock_env, mock_info, BankQuerier, MockApi, MockStorage, MOCK_CONTRACT_ADDR,
 };
 use cosmwasm_std::{
-    attr, coins, from_json, to_json_binary, Addr, BankMsg, Binary,
+    attr, coin, coins, from_json, to_json_binary, Addr, BankMsg, Binary,
     ContractResult as CwContractResult, CosmosMsg, Decimal, Empty, Env, MemoryStorage, MessageInfo,
     OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, WasmMsg,
 };
@@ -110,7 +110,7 @@ pub fn init() -> (OwnedDeps<MemoryStorage, MockApi, AuctionQuerier>, Env) {
 }
 
 #[test]
-pub fn user_joins_pool() {
+pub fn join_pool_works() {
     let (mut deps, env) = init();
 
     let info = mock_info("robinho", &coins(100, "native_denom"));
@@ -167,7 +167,51 @@ pub fn user_joins_pool() {
 }
 
 #[test]
-fn user_exit_pool_works() {
+fn join_pool_fails() {
+    let (mut deps, env) = init();
+
+    // join pool with wrong denom should fail
+    let info = mock_info("robinho", &coins(100, "wrong_denom"));
+    let msg = ExecuteMsg::JoinPool {
+        auction_round: 1,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        ContractError::PaymentError(cw_utils::PaymentError::MissingDenom(
+            "native_denom".to_string()
+        ))
+    );
+
+    // join pool without funds should fail
+    let info = mock_info("robinho", &[]);
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NoFunds {}));
+
+    // join pool sending 2 different denoms should fail
+    let info = mock_info("robinho", &vec![coin(100, "native_denom"), coin(100, "wrong_denom")]);
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::MultipleDenoms {}));
+
+    // joining the wrong auction round should fail
+    let info = mock_info("robinho", &coins(100, "native_denom"));
+    let msg = ExecuteMsg::JoinPool {
+        auction_round: 2,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        ContractError::InvalidAuctionRound {
+            current_auction_round: 1,
+            auction_round: 2
+        }
+    );
+}
+
+#[test]
+fn exit_pool_works() {
     let (mut deps, env) = init();
 
     let info = mock_info("robinho", &coins(100, "native_denom"));
@@ -207,7 +251,7 @@ fn user_exit_pool_works() {
 }
 
 #[test]
-fn user_exit_pool_fails() {
+fn exit_pool_fails() {
     let (mut deps, mut env) = init();
 
     let info = mock_info("robinho", &coins(100, "native_denom"));
@@ -215,20 +259,30 @@ fn user_exit_pool_fails() {
         auction_round: 1,
         basket_value: Uint128::from(10_000u128),
     };
-    let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+    let _ = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg).unwrap();
 
-    let info = mock_info("robinho", &coins(100, format!("factory/{}/1", env.contract.address)));
+    // exit pool with wrong denom should fail
     let msg = ExecuteMsg::ExitPool {};
-
-    // moving time to 6 days later (1+ day before auction ends) should fail
-    env.block.time = env.block.time.plus_seconds(6 * 86_400 + 1);
-
     let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        ContractError::PaymentError(cw_utils::PaymentError::MissingDenom(format!(
+            "factory/{MOCK_CONTRACT_ADDR}/1",
+        )))
+    );
 
-    // contract burns 100 lp tokens from the user
+    // exit pool without funds should fail
+    let info = mock_info("robinho", &[]);
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NoFunds {}));
+
+    // exit pool in T-1 day should fail
+    let info = mock_info("robinho", &coins(100, format!("factory/{}/1", env.contract.address)));
+    env.block.time = env.block.time.plus_seconds(6 * 86_400 + 1);
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::PooledAuctionLocked {});
 
-    // move time one more day, should be able to exit now
+    // exit pool after T-1 day should work now
     env.block.time = env.block.time.plus_seconds(86_400);
 
     let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
@@ -240,7 +294,6 @@ fn user_exit_pool_fails() {
             Uint128::from(100u128),
         )
     );
-
     assert_eq!(
         res.messages[1].msg,
         BankMsg::Send {
@@ -249,6 +302,5 @@ fn user_exit_pool_fails() {
         }
         .into()
     );
-
     assert_eq!(res.attributes, vec![attr("action", "exit_pool")]);
 }
