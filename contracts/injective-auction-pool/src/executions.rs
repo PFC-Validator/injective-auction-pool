@@ -140,9 +140,11 @@ pub(crate) fn try_bid(
     auction_round: u64,
     basket_value: Uint128,
 ) -> Result<Response, ContractError> {
+    cw_utils::nonpayable(&info)?;
+
     // only whitelist addresses or the contract itself can bid on the auction
     let config = CONFIG.load(deps.storage)?;
-    if info.sender != env.contract.address || !config.whitelisted_addresses.contains(&info.sender) {
+    if info.sender != env.contract.address && !config.whitelisted_addresses.contains(&info.sender) {
         return Err(ContractError::Unauthorized {});
     }
     let current_auction_round_response = query_current_auction(deps.as_ref())?;

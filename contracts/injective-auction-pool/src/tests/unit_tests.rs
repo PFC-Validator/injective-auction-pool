@@ -8,8 +8,9 @@ use cosmwasm_std::{
     ContractResult as CwContractResult, CosmosMsg, Decimal, Empty, Env, MemoryStorage, MessageInfo,
     OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, WasmMsg,
 };
-use injective_auction::auction::{Coin, QueryCurrentAuctionBasketResponse};
+use injective_auction::auction::{Coin, MsgBid, QueryCurrentAuctionBasketResponse};
 use injective_auction::auction_pool::{ExecuteMsg, InstantiateMsg};
+use prost::Message;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 use crate::contract::{execute, instantiate};
@@ -303,4 +304,46 @@ fn exit_pool_fails() {
         .into()
     );
     assert_eq!(res.attributes, vec![attr("action", "exit_pool")]);
+}
+
+#[test]
+fn try_bid_works() {
+    let (mut deps, env) = init();
+
+    // join pool with one user & enough funds to be able to outbid default highest bid (20000)
+    let info = mock_info("robinho", &coins(30_000, "native_denom"));
+    let msg = ExecuteMsg::JoinPool {
+        auction_round: 1,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+
+    let info = mock_info("bot", &[]);
+    let msg = ExecuteMsg::TryBid {
+        auction_round: 1,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+
+    // check the stargate bid message is correct, should only bid minimum allowed bid amount
+    assert_eq!(
+        res.messages[0].msg,
+        CosmosMsg::Stargate {
+            type_url: "/injective.auction.v1beta1.MsgBid".to_string(),
+            value: {
+                let msg = MsgBid {
+                    sender: env.contract.address.to_string(),
+                    bid_amount: Some(injective_auction::auction::Coin {
+                        denom: "native_denom".to_string(),
+                        amount: "20051".to_string(),
+                    }),
+                    round: 1,
+                };
+                Binary(msg.encode_to_vec())
+            },
+        }
+    );
+
+    // checking attributes are fine
+    assert_eq!(res.attributes, vec![attr("action", "try_bid"), attr("amount", "20051"),]);
 }
