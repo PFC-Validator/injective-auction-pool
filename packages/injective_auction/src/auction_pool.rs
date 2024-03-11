@@ -4,6 +4,7 @@ use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 #[cw_serde]
 pub struct InstantiateMsg {
+    pub owner: Option<String>,
     pub native_denom: String,
     pub token_factory_type: TokenFactoryType,
     pub rewards_fee: Decimal,
@@ -16,6 +17,20 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
+    UpdateConfig {
+        /// New owner of the contract
+        owner: Option<String>,
+        /// Percentage of the rewards that the rewards fee address will take. Value is between 0 and 1
+        rewards_fee: Option<Decimal>,
+        /// Address to receive the rewards fee
+        rewards_fee_addr: Option<String>,
+        /// Addresses that are allowed to call TriBid on the copntract
+        whitelist_addresses: Option<Vec<String>>,
+        /// Minimum next bid increment rate for the auction. Value is between 0 and 1
+        min_next_bid_increment_rate: Option<Decimal>,
+        /// The minimum return allowed in percentage. 5% means the contract cannot bid for more than 95% of the basket value
+        min_return: Option<Decimal>,
+    },
     /// Makes the contract bid on the auction. This is to be called by the any whitelisted address.
     TryBid {
         /// The auction round to bid on
@@ -50,6 +65,8 @@ pub enum QueryMsg {}
 #[cw_serde]
 /// Config of the contract
 pub struct Config {
+    /// Owner of the contract
+    pub owner: Addr,
     /// Contract native denom
     pub native_denom: String,
     /// Token Factory Type for the contract

@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use cosmwasm_std::testing::{
     mock_env, mock_info, BankQuerier, MockApi, MockStorage, MOCK_CONTRACT_ADDR,
 };
@@ -11,10 +9,11 @@ use cosmwasm_std::{
 use injective_auction::auction::{Coin, MsgBid, QueryCurrentAuctionBasketResponse};
 use injective_auction::auction_pool::{ExecuteMsg, InstantiateMsg};
 use prost::Message;
+use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 use crate::contract::{execute, instantiate};
-use crate::state::BIDDING_BALANCE;
+use crate::state::{BIDDING_BALANCE, CONFIG};
 use crate::ContractError;
 
 pub struct AuctionQuerier {
@@ -84,6 +83,7 @@ pub fn init() -> (OwnedDeps<MemoryStorage, MockApi, AuctionQuerier>, Env) {
     let env = mock_env();
 
     let msg = InstantiateMsg {
+        owner: Some("owner".to_string()),
         native_denom: "native_denom".to_string(),
         token_factory_type: TokenFactoryType::Injective,
         rewards_fee: Decimal::percent(10),
@@ -108,6 +108,59 @@ pub fn init() -> (OwnedDeps<MemoryStorage, MockApi, AuctionQuerier>, Env) {
     assert_eq!(BIDDING_BALANCE.load(&deps.storage).unwrap(), Uint128::zero());
 
     (deps, env)
+}
+
+#[test]
+fn update_config() {
+    let (mut deps, env) = init();
+
+    // update config as non-owner should fail
+    let info = mock_info("not_owner", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        rewards_fee: None,
+        rewards_fee_addr: None,
+        whitelist_addresses: None,
+        min_next_bid_increment_rate: None,
+        min_return: None,
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::Unauthorized {});
+
+    // update some of the config fields as owner should work
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: Some("new_owner".to_string()),
+        rewards_fee: Some(Decimal::percent(20)),
+        rewards_fee_addr: Some("new_rewards_addr".to_string()),
+        whitelist_addresses: Some(vec!["new_bot".to_string()]),
+        min_next_bid_increment_rate: Some(Decimal::percent(10)),
+        min_return: Some(Decimal::percent(10)),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "update_config"),
+            attr("owner", "new_owner"),
+            attr("native_denom", "native_denom"),
+            attr("token_factory_type", "Injective"),
+            attr("rewards_fee", "0.2"),
+            attr("rewards_fee_addr", "new_rewards_addr"),
+            attr("whitelisted_addresses", "new_bot"),
+            attr("min_next_bid_increment_rate", "0.1"),
+            attr("treasury_chest_code_id", "1"),
+            attr("min_return", "0.1"),
+        ]
+    );
+
+    let config = CONFIG.load(&deps.storage).unwrap();
+    assert_eq!(config.owner, Addr::unchecked("new_owner"));
+    assert_eq!(config.rewards_fee, Decimal::percent(20));
+    assert_eq!(config.rewards_fee_addr, "new_rewards_addr".to_string());
+    assert_eq!(config.whitelisted_addresses, vec!["new_bot".to_string()]);
+    assert_eq!(config.min_next_bid_increment_rate, Decimal::percent(10));
+    assert_eq!(config.min_return, Decimal::percent(10));
 }
 
 #[test]

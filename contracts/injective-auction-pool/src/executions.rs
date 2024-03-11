@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::helpers::query_current_auction;
+use crate::helpers::{query_current_auction, validate_percentage};
 use crate::state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
 use crate::ContractError;
 use cosmwasm_std::{
@@ -12,6 +12,76 @@ use injective_auction::auction_pool::ExecuteMsg::TryBid;
 use prost::Message;
 
 const DAY_IN_SECONDS: u64 = 86400;
+
+pub fn update_config(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    owner: Option<String>,
+    rewards_fee: Option<Decimal>,
+    rewards_fee_addr: Option<String>,
+    whitelist_addresses: Option<Vec<String>>,
+    min_next_bid_increment_rate: Option<Decimal>,
+    min_return: Option<Decimal>,
+) -> Result<Response, ContractError> {
+    let mut config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if let Some(owner) = owner {
+        config.owner = deps.api.addr_validate(&owner)?;
+    }
+
+    if let Some(rewards_fee) = rewards_fee {
+        config.rewards_fee = validate_percentage(rewards_fee)?;
+    }
+
+    if let Some(rewards_fee_addr) = rewards_fee_addr {
+        config.rewards_fee_addr = deps.api.addr_validate(&rewards_fee_addr)?;
+    }
+
+    if let Some(whitelist_addresses) = whitelist_addresses {
+        config.whitelisted_addresses = whitelist_addresses
+            .iter()
+            .map(|addr| deps.api.addr_validate(&addr))
+            .collect::<Result<Vec<Addr>, _>>()?;
+    }
+
+    if let Some(min_next_bid_increment_rate) = min_next_bid_increment_rate {
+        config.min_next_bid_increment_rate = validate_percentage(min_next_bid_increment_rate)?;
+    }
+
+    if let Some(min_return) = min_return {
+        config.min_return = validate_percentage(min_return)?;
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    Ok(Response::default()
+        .add_attribute("action", "update_config")
+        .add_attribute("owner", config.owner.to_string())
+        .add_attribute("native_denom", config.native_denom)
+        .add_attribute("token_factory_type", config.token_factory_type.to_string())
+        .add_attribute("rewards_fee", config.rewards_fee.to_string())
+        .add_attribute("rewards_fee_addr", config.rewards_fee_addr.to_string())
+        .add_attribute(
+            "whitelisted_addresses",
+            config
+                .whitelisted_addresses
+                .iter()
+                .map(|addr| addr.to_string())
+                .collect::<Vec<String>>()
+                .join(","),
+        )
+        .add_attribute(
+            "min_next_bid_increment_rate",
+            config.min_next_bid_increment_rate.to_string(),
+        )
+        .add_attribute("treasury_chest_code_id", config.treasury_chest_code_id.to_string())
+        .add_attribute("min_return", config.min_return.to_string()))
+}
 
 /// Joins the pool
 pub(crate) fn join_pool(

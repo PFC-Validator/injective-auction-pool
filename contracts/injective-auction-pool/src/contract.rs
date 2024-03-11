@@ -18,10 +18,12 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn instantiate(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    let owner = deps.api.addr_validate(&msg.owner.unwrap_or(info.sender.to_string()))?;
 
     let whitelisted_addresses = msg
         .whitelisted_addresses
@@ -32,6 +34,7 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
+            owner,
             native_denom: msg.native_denom,
             token_factory_type: msg.token_factory_type.clone(),
             rewards_fee: validate_percentage(msg.rewards_fee)?,
@@ -89,6 +92,24 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        ExecuteMsg::UpdateConfig {
+            owner,
+            rewards_fee,
+            rewards_fee_addr,
+            whitelist_addresses,
+            min_next_bid_increment_rate,
+            min_return,
+        } => executions::update_config(
+            deps,
+            env,
+            info,
+            owner,
+            rewards_fee,
+            rewards_fee_addr,
+            whitelist_addresses,
+            min_next_bid_increment_rate,
+            min_return,
+        ),
         ExecuteMsg::TryBid {
             auction_round,
             basket_value,
