@@ -2,9 +2,9 @@ use cosmwasm_std::testing::{
     mock_env, mock_info, BankQuerier, MockApi, MockStorage, MOCK_CONTRACT_ADDR,
 };
 use cosmwasm_std::{
-    attr, coin, coins, from_json, to_json_binary, Addr, BankMsg, Binary,
-    ContractResult as CwContractResult, CosmosMsg, Decimal, Empty, Env, MemoryStorage, MessageInfo,
-    OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, WasmMsg,
+    attr, coin, coins, from_json, to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse,
+    ContractResult as CwContractResult, CosmosMsg, Decimal, Empty, Env, HexBinary, MemoryStorage,
+    MessageInfo, OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, WasmMsg, WasmQuery,
 };
 use injective_auction::auction::{Coin, MsgBid, QueryCurrentAuctionBasketResponse};
 use injective_auction::auction_pool::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 use crate::contract::{execute, instantiate, query};
-use crate::state::BIDDING_BALANCE;
+use crate::state::{BIDDING_BALANCE, UNSETTLED_AUCTION};
 use crate::ContractError;
 
 pub struct AuctionQuerier {
@@ -58,6 +58,20 @@ impl Querier for AuctionQuerier {
                 }),
             },
             QueryRequest::Bank(query) => self.bank.query(&query),
+            QueryRequest::Wasm(WasmQuery::CodeInfo {
+                code_id,
+            }) => Ok(CwContractResult::Ok(
+                to_json_binary(&CodeInfoResponse::new(
+                    code_id,
+                    Addr::unchecked("creator").to_string(),
+                    HexBinary::from_hex(
+                        "13a1fc994cc6d1c81b746ee0c0ff6f90043875e0bf1d9be6b7d779fc978dc2a5",
+                    )
+                    .unwrap(),
+                ))
+                .unwrap(),
+            ))
+            .into(),
             _ => QuerierResult::Err(cosmwasm_std::SystemError::UnsupportedRequest {
                 kind: format!("Unmocked query type: {request:?}"),
             }),
@@ -496,3 +510,100 @@ fn try_bid_fails() {
     let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NonPayable {}));
 }
+
+// TODO: to test settle auction, go to 
+// #[test]
+// fn settle_auction_as_loser_works() {
+//     let (mut deps, mut env) = init();
+
+//     // join pool with one user & enough funds to be able to outbid default highest bid (20000)
+//     let info = mock_info("robinho", &coins(30_000, "native_denom"));
+//     let msg = ExecuteMsg::JoinPool {
+//         auction_round: 1,
+//         basket_value: Uint128::from(25_000u128),
+//     };
+//     let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+
+//     // mock the auction round to be 0 so the contract thinks the auction round is over
+//     let mut unsettled_auction = UNSETTLED_AUCTION.load(deps.as_ref().storage).unwrap();
+//     println!("{:?}", unsettled_auction);
+//     unsettled_auction.auction_round = 0;
+//     UNSETTLED_AUCTION.save(deps.as_mut().storage, &unsettled_auction).unwrap();
+//     env.block.time = env.block.time.plus_days(7);
+
+//     // settle auction with contract not being the highest bidder should work
+//     let info = mock_info("bot", &[]);
+//     let msg = ExecuteMsg::SettleAuction {
+//         auction_round: 1,
+//         auction_winner: "highest_bidder".to_string(),
+//         auction_winning_bid: Uint128::from(20000u128),
+//     };
+//     let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap();
+//     assert_eq!(res.messages.len(), 0);
+//     assert_eq!(
+//         res.attributes,
+//         vec![
+//             attr("action", "settle_auction"),
+//             attr("settled_action_round", "0"),
+//             attr("current_action_round", "1"),
+//         ]
+//     );
+
+//     let unsettled_auction = UNSETTLED_AUCTION.load(deps.as_ref().storage).unwrap();
+//     assert_eq!(unsettled_auction.auction_round, 1);
+//     assert_eq!(unsettled_auction.basket, vec![coin(10_000, "uatom")]);
+//     assert_eq!(unsettled_auction.closing_time, 1_571_797_419 + 7 * 86_400);
+//     assert_eq!(unsettled_auction.lp_subdenom, 1);
+// }
+
+// #[test]
+// fn settle_auction_as_winner_works() {
+//     let (mut deps, mut env) = init();
+
+//     // join pool with one user & enough funds to be able to outbid default highest bid (20000)
+//     let info = mock_info("robinho", &coins(30_000, "native_denom"));
+//     let msg = ExecuteMsg::JoinPool {
+//         auction_round: 1,
+//         basket_value: Uint128::from(25_000u128),
+//     };
+//     let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+
+//     // mock the auction round to be 0 so the contract thinks the auction round is over
+//     let mut unsettled_auction = UNSETTLED_AUCTION.load(deps.as_ref().storage).unwrap();
+//     unsettled_auction.auction_round = 0;
+//     UNSETTLED_AUCTION.save(deps.as_mut().storage, &unsettled_auction).unwrap();
+//     env.block.time = env.block.time.plus_days(7);
+
+//     // settle auction with highest bidder should work
+//     let info = mock_info("bot", &[]);
+//     let msg = ExecuteMsg::SettleAuction {
+//         auction_round: 1,
+//         auction_winner: "cosmos2contract".to_string(),
+//         auction_winning_bid: Uint128::from(20000u128),
+//     };
+//     let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+
+//     // check the stargate settle auction message is correct
+//     assert_eq!(
+//         res.messages[0].msg,
+//         CosmosMsg::Bank(BankMsg::Send {
+//             to_address: "rewards_addr".to_string(),
+//             // 10% of the basket assets (10_000 uatom)
+//             amount: coins(10_000 * 10 / 100, "uatom"),
+//         })
+//     );
+//     assert_eq!(
+//         res.attributes,
+//         vec![
+//             attr("action", "settle_auction"),
+//             attr("settled_action_round", "0"),
+//             attr(
+//                 "treasure_chest_address",
+//                 // this is a mock address, as the checksum was invented
+//                 "ED9963158CC851609F6BCFE30C3256F3471F11E3087F6DB5244B1FE5659757C4"
+//             ),
+//             attr("current_action_round", "1"),
+//             attr("new_subdenom", "2"),
+//         ]
+//     );
+// }

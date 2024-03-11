@@ -302,6 +302,7 @@ pub fn settle_auction(
     // prevents the contract from settling the wrong auction round
     let unsettled_auction = UNSETTLED_AUCTION.load(deps.storage)?;
 
+    // TODO: comment / uncomment this block to bypass the check for testing settle auction
     if auction_round != unsettled_auction.auction_round {
         return Err(ContractError::InvalidAuctionRound {
             current_auction_round: unsettled_auction.auction_round,
