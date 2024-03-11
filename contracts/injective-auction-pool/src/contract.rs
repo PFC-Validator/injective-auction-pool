@@ -9,6 +9,7 @@ use injective_auction::auction_pool::{Config, ExecuteMsg, InstantiateMsg, QueryM
 use crate::error::ContractError;
 use crate::executions::{self, settle_auction};
 use crate::helpers::{query_current_auction, validate_percentage};
+use crate::queries;
 use crate::state::{Auction, BIDDING_BALANCE, CONFIG, UNSETTLED_AUCTION};
 
 const CONTRACT_NAME: &str = "crates.io:injective-auction-pool";
@@ -128,6 +129,8 @@ pub fn execute(
 }
 
 #[entry_point]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
-    unimplemented!()
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::Config {} => queries::query_config(deps),
+    }
 }

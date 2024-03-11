@@ -7,13 +7,13 @@ use cosmwasm_std::{
     OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, WasmMsg,
 };
 use injective_auction::auction::{Coin, MsgBid, QueryCurrentAuctionBasketResponse};
-use injective_auction::auction_pool::{ExecuteMsg, InstantiateMsg};
+use injective_auction::auction_pool::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 use prost::Message;
 use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
-use crate::contract::{execute, instantiate};
-use crate::state::{BIDDING_BALANCE, CONFIG};
+use crate::contract::{execute, instantiate, query};
+use crate::state::BIDDING_BALANCE;
 use crate::ContractError;
 
 pub struct AuctionQuerier {
@@ -154,7 +154,10 @@ fn update_config() {
         ]
     );
 
-    let config = CONFIG.load(&deps.storage).unwrap();
+    // query the config to check if it was updated
+    let msg = QueryMsg::Config {};
+    let res: ConfigResponse = from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    let config = res.config;
     assert_eq!(config.owner, Addr::unchecked("new_owner"));
     assert_eq!(config.rewards_fee, Decimal::percent(20));
     assert_eq!(config.rewards_fee_addr, "new_rewards_addr".to_string());

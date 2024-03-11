@@ -60,7 +60,15 @@ pub enum ExecuteMsg {
 
 #[cw_serde]
 #[derive(QueryResponses)]
-pub enum QueryMsg {}
+pub enum QueryMsg {
+    #[returns(ConfigResponse)]
+    Config {},
+}
+
+#[cw_serde]
+pub struct ConfigResponse {
+    pub config: Config,
+}
 
 #[cw_serde]
 /// Config of the contract
