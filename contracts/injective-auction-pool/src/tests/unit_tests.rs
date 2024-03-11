@@ -308,7 +308,23 @@ fn exit_pool_fails() {
 
 #[test]
 fn try_bid_works() {
-    let (mut deps, env) = init();
+    let (mut deps, mut env) = init();
+
+    // try bid with no previous bids should not fail but won't bid either
+    let info = mock_info("bot", &[]);
+    let msg = ExecuteMsg::TryBid {
+        auction_round: 1,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap();
+    assert_eq!(res.messages.len(), 0);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "did_not_bid"),
+            attr("reason", "minimum_allowed_bid_is_higher_than_bidding_balance")
+        ]
+    );
 
     // join pool with one user & enough funds to be able to outbid default highest bid (20000)
     let info = mock_info("robinho", &coins(30_000, "native_denom"));
@@ -321,9 +337,9 @@ fn try_bid_works() {
     let info = mock_info("bot", &[]);
     let msg = ExecuteMsg::TryBid {
         auction_round: 1,
-        basket_value: Uint128::from(10_000u128),
+        basket_value: Uint128::from(100_000u128),
     };
-    let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap();
 
     // check the stargate bid message is correct, should only bid minimum allowed bid amount
     assert_eq!(
@@ -343,7 +359,84 @@ fn try_bid_works() {
             },
         }
     );
-
-    // checking attributes are fine
     assert_eq!(res.attributes, vec![attr("action", "try_bid"), attr("amount", "20051"),]);
+
+    // try bid on a basket value that is lower than the highest bid should not fail but not bid either
+    let info = mock_info("bot", &[]);
+    let msg = ExecuteMsg::TryBid {
+        auction_round: 1,
+        basket_value: Uint128::from(5_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap();
+    assert_eq!(res.messages.len(), 0);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "did_not_bid"),
+            attr("reason", "basket_value_is_not_worth_bidding_for")
+        ]
+    );
+
+    // try bid as the highest_bidder should not fail but won't bid either
+    env.contract.address = Addr::unchecked("highest_bidder");
+    let info = mock_info("highest_bidder", &[]);
+    let msg = ExecuteMsg::TryBid {
+        auction_round: 1,
+        basket_value: Uint128::from(100_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap();
+    assert_eq!(res.messages.len(), 0);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "did_not_bid"),
+            attr("reason", "contract_is_already_the_highest_bidder")
+        ]
+    );
+}
+
+#[test]
+fn try_bid_fails() {
+    let (mut deps, env) = init();
+
+    // join pool with one user & enough funds to be able to outbid default highest bid (20000)
+    let info = mock_info("robinho", &coins(30_000, "native_denom"));
+    let msg = ExecuteMsg::JoinPool {
+        auction_round: 1,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+
+    // try bid from non-whitelisted address should fail
+    let info = mock_info("non_whitelisted", &[]);
+    let msg = ExecuteMsg::TryBid {
+        auction_round: 1,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg);
+    assert_eq!(res.unwrap_err(), ContractError::Unauthorized {});
+
+    // try_bid with wrong auction round should fail
+    let info = mock_info("bot", &[]);
+    let msg = ExecuteMsg::TryBid {
+        auction_round: 2,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        ContractError::InvalidAuctionRound {
+            current_auction_round: 1,
+            auction_round: 2
+        }
+    );
+
+    // try_bid with funds should fail
+    let info = mock_info("bot", &coins(20_000, "native_denom"));
+    let msg = ExecuteMsg::TryBid {
+        auction_round: 1,
+        basket_value: Uint128::from(10_000u128),
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NonPayable {}));
 }

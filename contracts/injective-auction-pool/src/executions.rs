@@ -186,7 +186,7 @@ pub(crate) fn try_bid(
     }
 
     // prevents the contract from bidding if the returns are not high enough
-    if basket_value * (Decimal::one() - config.min_return) > minimum_allowed_bid {
+    if basket_value * (Decimal::one() - config.min_return) < minimum_allowed_bid {
         return Ok(Response::default()
             .add_attribute("action", "did_not_bid")
             .add_attribute("reason", "basket_value_is_not_worth_bidding_for"));
