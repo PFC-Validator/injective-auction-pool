@@ -396,7 +396,7 @@ pub fn settle_auction(
         let denom = format!("factory/{}/{}", env.contract.address, unsettled_auction.lp_subdenom);
 
         messages.push(CosmosMsg::Wasm(WasmMsg::Instantiate2 {
-            admin: None,
+            admin: Some(env.contract.address.to_string()),
             code_id,
             label: format!("Treasure chest for auction round {}", unsettled_auction.auction_round),
             msg: to_json_binary(&treasurechest::chest::InstantiateMsg {
@@ -406,7 +406,7 @@ pub fn settle_auction(
                 token_factory: config.token_factory_type.to_string(),
                 burn_it: Some(false),
             })?,
-            funds: vec![],
+            funds: basket_to_treasure_chest,
             salt,
         }));
 

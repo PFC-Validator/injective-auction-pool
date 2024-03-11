@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 use crate::contract::{execute, instantiate, query};
-use crate::state::{BIDDING_BALANCE, UNSETTLED_AUCTION};
+use crate::state::{BIDDING_BALANCE, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
 use crate::ContractError;
 
 pub struct AuctionQuerier {
@@ -511,7 +511,8 @@ fn try_bid_fails() {
     assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NonPayable {}));
 }
 
-// TODO: to test settle auction, go to 
+// TODO: to test settle auction, need to comment the line that checks if the auction round is valid on executions.rs
+//
 // #[test]
 // fn settle_auction_as_loser_works() {
 //     let (mut deps, mut env) = init();
@@ -526,7 +527,6 @@ fn try_bid_fails() {
 
 //     // mock the auction round to be 0 so the contract thinks the auction round is over
 //     let mut unsettled_auction = UNSETTLED_AUCTION.load(deps.as_ref().storage).unwrap();
-//     println!("{:?}", unsettled_auction);
 //     unsettled_auction.auction_round = 0;
 //     UNSETTLED_AUCTION.save(deps.as_mut().storage, &unsettled_auction).unwrap();
 //     env.block.time = env.block.time.plus_days(7);
@@ -592,6 +592,51 @@ fn try_bid_fails() {
 //             amount: coins(10_000 * 10 / 100, "uatom"),
 //         })
 //     );
+
+//     assert_eq!(
+//         res.messages[1].msg,
+//         WasmMsg::Instantiate2 {
+//             admin: Some("cosmos2contract".to_string()),
+//             code_id: 1,
+//             label: "Treasure chest for auction round 0".to_string(),
+//             msg: to_json_binary(&treasurechest::chest::InstantiateMsg {
+//                 denom: "native_denom".to_string(),
+//                 owner: "cosmos2contract".to_string(),
+//                 notes: "factory/cosmos2contract/1".to_string(),
+//                 token_factory: TokenFactoryType::Injective.to_string(),
+//                 burn_it: Some(false)
+//             })
+//             .unwrap(),
+//             funds: vec![coin(10_000, "native_denom"), coin(10_000 * 90 / 100, "uatom")],
+//             salt: Binary::from(
+//                 format!(
+//                     "{}{}{}",
+//                     unsettled_auction.auction_round,
+//                     "bot".to_string(),
+//                     env.block.height
+//                 )
+//                 .as_bytes()
+//             ),
+//         }
+//         .into()
+//     );
+
+//     let treasure_chest_addr = TREASURE_CHEST_CONTRACTS.load(&deps.storage, 0).unwrap();
+
+//     assert_eq!(
+//         res.messages[2].msg,
+//         TokenFactoryType::Injective.change_admin(
+//             Addr::unchecked("cosmos2contract"),
+//             "factory/cosmos2contract/1",
+//             treasure_chest_addr
+//         )
+//     );
+
+//     assert_eq!(
+//         res.messages[3].msg,
+//         TokenFactoryType::Injective.create_denom(Addr::unchecked(MOCK_CONTRACT_ADDR), "2")
+//     );
+
 //     assert_eq!(
 //         res.attributes,
 //         vec![
