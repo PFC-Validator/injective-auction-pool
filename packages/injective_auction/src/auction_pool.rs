@@ -63,11 +63,28 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
+    #[returns(TreasureChestContractsResponse)]
+    TreasureChestContracts {
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    },
+    #[returns(BiddingBalanceResponse)]
+    BiddingBalance {},
 }
 
 #[cw_serde]
 pub struct ConfigResponse {
     pub config: Config,
+}
+
+#[cw_serde]
+pub struct TreasureChestContractsResponse {
+    pub treasure_chest_contracts: Vec<(u64, Addr)>,
+}
+
+#[cw_serde]
+pub struct BiddingBalanceResponse {
+    pub bidding_balance: Uint128,
 }
 
 #[cw_serde]

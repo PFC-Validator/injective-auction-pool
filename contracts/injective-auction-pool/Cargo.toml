@@ -1,7 +1,11 @@
 [package]
 name = "injective-auction-pool"
 description = "Smart contract that allows for community members to pool together INJ to participate in burn auctions"
-authors = ["Kerber0x <kerber0x@protonmail.com>", "Nahem <nahemseguias@gmail.com>", "PFC <pfc@pfc.zone>"]
+authors = [
+    "Kerber0x <kerber0x@protonmail.com>",
+    "Nahem <nahemseguias@gmail.com>",
+    "PFC <pfc@pfc.zone>",
+]
 version = "0.1.0"
 
 edition = { workspace = true }
@@ -22,7 +26,7 @@ backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
 cosmwasm-schema = { workspace = true }
-cosmwasm-std = { workspace = true}
+cosmwasm-std = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 cw2 = { workspace = true }
@@ -32,6 +36,7 @@ injective_auction = { workspace = true }
 prost = { workspace = true }
 cw-utils = { workspace = true }
 treasurechest = { workspace = true }
+cw-paginate-storage = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }

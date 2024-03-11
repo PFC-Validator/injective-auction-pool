@@ -132,5 +132,10 @@ pub fn execute(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => queries::query_config(deps),
+        QueryMsg::TreasureChestContracts {
+            start_after,
+            limit,
+        } => queries::query_treasure_chest_contracts(deps, start_after, limit),
+        QueryMsg::BiddingBalance {} => queries::query_bidding_balance(deps),
     }
 }

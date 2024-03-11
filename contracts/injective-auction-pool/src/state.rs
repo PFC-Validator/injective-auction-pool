@@ -17,11 +17,9 @@ pub struct Auction {
 
 /// Stores the config of the contract
 pub const CONFIG: Item<Config> = Item::new("config");
-/// Stores the reward vault addresses. Key is the auction number.
-pub const REWARD_VAULTS: Map<u128, Addr> = Map::new("reward_vaults");
 /// Available balance to be used for bidding
 pub const BIDDING_BALANCE: Item<Uint128> = Item::new("bidding_balance");
 /// Stores the current auction details
-pub const UNSETTLED_AUCTION: Item<Auction> = Item::new("current_auction");
+pub const UNSETTLED_AUCTION: Item<Auction> = Item::new("usnsettled_auction");
 /// Maps the auction round to the treasure chest contract address
 pub const TREASURE_CHEST_CONTRACTS: Map<u64, Addr> = Map::new("treasure_chest_contracts");
