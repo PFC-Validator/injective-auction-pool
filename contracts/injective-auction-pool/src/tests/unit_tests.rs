@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 use crate::contract::{execute, instantiate, query};
-use crate::state::{BIDDING_BALANCE, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
+use crate::state::BIDDING_BALANCE;
 use crate::ContractError;
 
 pub struct AuctionQuerier {
@@ -512,7 +512,7 @@ fn try_bid_fails() {
 }
 
 // TODO: to test settle auction, need to comment the line that checks if the auction round is valid on executions.rs
-//
+// use crate::state::{TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
 // #[test]
 // fn settle_auction_as_loser_works() {
 //     let (mut deps, mut env) = init();

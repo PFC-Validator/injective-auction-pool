@@ -9,7 +9,6 @@ use cosmwasm_std::{
 };
 use injective_auction::auction::MsgBid;
 use injective_auction::auction_pool::ExecuteMsg::TryBid;
-use prost::Message;
 
 const DAY_IN_SECONDS: u64 = 86400;
 
@@ -45,7 +44,7 @@ pub fn update_config(
     if let Some(whitelist_addresses) = whitelist_addresses {
         config.whitelisted_addresses = whitelist_addresses
             .iter()
-            .map(|addr| deps.api.addr_validate(&addr))
+            .map(|addr| deps.api.addr_validate(addr))
             .collect::<Result<Vec<Addr>, _>>()?;
     }
 
@@ -182,14 +181,13 @@ pub(crate) fn exit_pool(
 
     let config = CONFIG.load(deps.storage)?;
 
-    let mut messages = vec![];
-
     // burn the LP token and send the inj back to the user
-    messages.push(config.token_factory_type.burn(
+    let mut messages = vec![config.token_factory_type.burn(
         env.contract.address.clone(),
         lp_denom.as_str(),
         amount,
-    ));
+    )];
+
     messages.push(
         BankMsg::Send {
             to_address: info.sender.to_string(),
@@ -239,6 +237,7 @@ pub(crate) fn try_bid(
 
     // calculate the minimum allowed bid to not be rejected by the auction module
     // minimum_allowed_bid = (highest_bid_amount * (1 + min_next_bid_increment_rate)) + 1
+    // the latest + 1 is to make sure the auction module accepts the bid all the times
     let minimum_allowed_bid = current_auction_round_response
         .highest_bid_amount
         .unwrap_or(0.to_string())
@@ -262,24 +261,17 @@ pub(crate) fn try_bid(
             .add_attribute("reason", "basket_value_is_not_worth_bidding_for"));
     }
 
-    // TODO: need to send some funds here?
-    let message: CosmosMsg = CosmosMsg::Stargate {
-        type_url: "/injective.auction.v1beta1.MsgBid".to_string(),
-        value: {
-            let msg = MsgBid {
-                sender: env.contract.address.to_string(),
-                bid_amount: Some(injective_auction::auction::Coin {
-                    denom: config.native_denom,
-                    amount: minimum_allowed_bid.to_string(),
-                }),
-                round: auction_round,
-            };
-            Binary(msg.encode_to_vec())
-        },
-    };
+    let msg = <MsgBid as Into<CosmosMsg>>::into(MsgBid {
+        sender: env.contract.address.to_string(),
+        bid_amount: Some(injective_auction::auction::Coin {
+            denom: config.native_denom,
+            amount: minimum_allowed_bid.to_string(),
+        }),
+        round: auction_round,
+    });
 
     Ok(Response::default()
-        .add_message(message)
+        .add_message(msg)
         .add_attribute("action", "try_bid".to_string())
         .add_attribute("amount", minimum_allowed_bid.to_string()))
 }
@@ -321,7 +313,9 @@ pub fn settle_auction(
     }
 
     // the contract won the auction
-    if auction_winner == env.contract.address.to_string() {
+    // NOTE: this is assuming the bot is sending the correct data about the winner of the previous auction
+    // currently there's no way to query the auction module directly to get this information
+    if deps.api.addr_validate(&auction_winner)? == env.contract.address {
         // update LP subdenom for the next auction round (increment by 1)
         let new_subdenom = unsettled_auction.lp_subdenom.checked_add(1).ok_or(
             ContractError::OverflowError(OverflowError {
@@ -391,7 +385,7 @@ pub fn settle_auction(
         let salt = Binary::from(seed.as_bytes());
 
         let treasure_chest_address =
-            Addr::unchecked(&instantiate2_address(&checksum, &creator, &salt)?.to_string());
+            Addr::unchecked(instantiate2_address(&checksum, &creator, &salt)?.to_string());
 
         let denom = format!("factory/{}/{}", env.contract.address, unsettled_auction.lp_subdenom);
 
@@ -429,6 +423,25 @@ pub fn settle_auction(
                 .token_factory_type
                 .create_denom(env.contract.address, new_subdenom.to_string().as_str()),
         );
+
+        let basket = current_auction_round_response
+            .amount
+            .iter()
+            .map(|coin| Coin {
+                amount: Uint128::from_str(&coin.amount).expect("Failed to parse coin amount"),
+                denom: coin.denom.clone(),
+            })
+            .collect();
+
+        UNSETTLED_AUCTION.save(
+            deps.storage,
+            &Auction {
+                basket,
+                auction_round,
+                lp_subdenom: new_subdenom,
+                closing_time: current_auction_round_response.auction_closing_time(),
+            },
+        )?;
 
         Ok(Response::default()
             .add_messages(messages)
