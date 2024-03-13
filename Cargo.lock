@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "injective-auction-pool"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -518,7 +518,7 @@ dependencies = [
 
 [[package]]
 name = "injective_auction"
-version = "0.0.1"
+version = "0.1.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -534,7 +534,7 @@ dependencies = [
 
 [[package]]
 name = "integration"
-version = "0.0.1"
+version = "0.1.1"
 dependencies = [
  "cosmwasm-std",
  "cw-multi-test",
@@ -930,7 +930,7 @@ dependencies = [
 
 [[package]]
 name = "treasurechest"
-version = "0.0.1"
+version = "0.1.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -947,7 +947,7 @@ dependencies = [
 
 [[package]]
 name = "treasurechest-contract"
-version = "0.0.1"
+version = "0.1.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
