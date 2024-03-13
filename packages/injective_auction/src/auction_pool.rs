@@ -24,7 +24,7 @@ pub enum ExecuteMsg {
         rewards_fee: Option<Decimal>,
         /// Address to receive the rewards fee
         rewards_fee_addr: Option<String>,
-        /// Addresses that are allowed to call TriBid on the copntract
+        /// Addresses that are allowed to call TriBid on the contract
         whitelist_addresses: Option<Vec<String>>,
         /// Minimum next bid increment rate for the auction. Value is between 0 and 1
         min_next_bid_increment_rate: Option<Decimal>,
