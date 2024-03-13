@@ -285,7 +285,7 @@ pub fn settle_auction(
     auction_winning_bid: Uint128,
 ) -> Result<Response, ContractError> {
     // only whitelist addresses can settle the auction for now until the
-    // contract can query the aunction module for a specific auction round
+    // contract can query the auction module for a specific auction round
     let config = CONFIG.load(deps.storage)?;
     if !config.whitelisted_addresses.contains(&info.sender) {
         return Err(ContractError::Unauthorized {});
