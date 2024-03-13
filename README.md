@@ -10,4 +10,4 @@ we make no warranties on its use or purpose. do not use this.
 
 ## Code Coverage
 
-[Here](https://app.codecov.io/github/PFC-Validator/injective-auction-pool)
+[![codecov](https://codecov.io/github/PFC-Validator/injective-auction-pool/graph/badge.svg?token=Uyuy5YP4ze)](https://codecov.io/github/PFC-Validator/injective-auction-pool)
