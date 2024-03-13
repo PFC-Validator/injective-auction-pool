@@ -31,7 +31,7 @@ pub enum ExecuteMsg {
         /// The minimum return allowed in percentage. 5% means the contract cannot bid for more than 95% of the basket value
         min_return: Option<Decimal>,
     },
-    /// Makes the contract bid on the auction. This is to be called by the any whitelisted address.
+    /// Makes the contract bid on the auction. This is to be called by any of the whitelisted address.
     TryBid {
         /// The auction round to bid on
         auction_round: u64,
