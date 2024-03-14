@@ -1,4 +1,5 @@
-use cosmwasm_std::{Decimal, Instantiate2AddressError, OverflowError, StdError};
+use cosmwasm_std::{Decimal, Instantiate2AddressError, OverflowError, StdError, Uint128};
+use cw_ownable::OwnershipError;
 use cw_utils::PaymentError;
 use thiserror::Error;
 
@@ -49,4 +50,19 @@ pub enum ContractError {
 
     #[error("Instantiate address error: {0}")]
     Instantiate2AddressError(#[from] Instantiate2AddressError),
+
+    #[error("Missing auction winner")]
+    MissingAuctionWinner,
+
+    #[error("Missing auction winning bid")]
+    MissingAuctionWinningBid,
+
+    #[error("Insufficient funds. Must deposit at least {min_balance} {native_denom} to instantiate the contract")]
+    InsufficientFunds {
+        native_denom: String,
+        min_balance: Uint128,
+    },
+
+    #[error(transparent)]
+    Ownership(#[from] OwnershipError),
 }

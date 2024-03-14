@@ -504,6 +504,7 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
+ "cw-ownable",
  "cw-paginate-storage",
  "cw-storage-plus",
  "cw-utils",
@@ -522,6 +523,7 @@ version = "0.0.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-ownable",
  "osmosis-std-derive",
  "prost",
  "prost-types",

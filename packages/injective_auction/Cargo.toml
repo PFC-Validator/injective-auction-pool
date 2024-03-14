@@ -21,6 +21,7 @@ prost = { workspace = true }
 prost-types = { workspace = true }
 osmosis-std-derive = { workspace = true }
 treasurechest = { workspace = true }
+cw-ownable = { workspace = true }
 
 [dev-dependencies]
 protobuf = { workspace = true }

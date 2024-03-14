@@ -1,11 +1,9 @@
-use std::str::FromStr;
-
-use crate::helpers::{query_current_auction, validate_percentage};
-use crate::state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
+use crate::helpers::{new_auction_round, query_current_auction, validate_percentage};
+use crate::state::{BIDDING_BALANCE, CONFIG, UNSETTLED_AUCTION};
 use crate::ContractError;
 use cosmwasm_std::{
-    coins, instantiate2_address, to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse, Coin,
-    CosmosMsg, Decimal, DepsMut, Env, MessageInfo, OverflowError, Response, Uint128, WasmMsg,
+    coins, to_json_binary, Addr, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response,
+    Uint128, WasmMsg,
 };
 use injective_auction::auction::MsgBid;
 use injective_auction::auction_pool::ExecuteMsg::TryBid;
@@ -16,22 +14,15 @@ pub fn update_config(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    owner: Option<String>,
     rewards_fee: Option<Decimal>,
     rewards_fee_addr: Option<String>,
     whitelist_addresses: Option<Vec<String>>,
     min_next_bid_increment_rate: Option<Decimal>,
     min_return: Option<Decimal>,
 ) -> Result<Response, ContractError> {
+    cw_ownable::assert_owner(deps.storage, &info.sender)?;
+
     let mut config = CONFIG.load(deps.storage)?;
-
-    if info.sender != config.owner {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    if let Some(owner) = owner {
-        config.owner = deps.api.addr_validate(&owner)?;
-    }
 
     if let Some(rewards_fee) = rewards_fee {
         config.rewards_fee = validate_percentage(rewards_fee)?;
@@ -60,7 +51,6 @@ pub fn update_config(
 
     Ok(Response::default()
         .add_attribute("action", "update_config")
-        .add_attribute("owner", config.owner.to_string())
         .add_attribute("native_denom", config.native_denom)
         .add_attribute("token_factory_type", config.token_factory_type.to_string())
         .add_attribute("rewards_fee", config.rewards_fee.to_string())
@@ -111,12 +101,12 @@ pub(crate) fn join_pool(
     let lp_subdenom = UNSETTLED_AUCTION.load(deps.storage)?.lp_subdenom;
     messages.push(config.token_factory_type.mint(
         env.contract.address.clone(),
-        lp_subdenom.to_string().as_str(),
+        format!("auction.{}", lp_subdenom).as_str(),
         amount,
     ));
 
     // send the minted lp token to the user
-    let lp_denom = format!("factory/{}/{}", env.contract.address, lp_subdenom);
+    let lp_denom = format!("factory/{}/auction.{}", env.contract.address, lp_subdenom);
     messages.push(
         BankMsg::Send {
             to_address: info.sender.to_string(),
@@ -157,7 +147,7 @@ pub(crate) fn exit_pool(
 
     //make sure the user sends a correct amount and denom to exit the pool
     let lp_denom = format!(
-        "factory/{}/{}",
+        "factory/{}/auction.{}",
         env.contract.address,
         UNSETTLED_AUCTION.load(deps.storage)?.lp_subdenom
     );
@@ -312,169 +302,11 @@ pub fn settle_auction(
         return Err(ContractError::AuctionRoundHasNotFinished);
     }
 
-    // the contract won the auction
-    // NOTE: this is assuming the bot is sending the correct data about the winner of the previous auction
-    // currently there's no way to query the auction module directly to get this information
-    if deps.api.addr_validate(&auction_winner)? == env.contract.address {
-        // update LP subdenom for the next auction round (increment by 1)
-        let new_subdenom = unsettled_auction.lp_subdenom.checked_add(1).ok_or(
-            ContractError::OverflowError(OverflowError {
-                operation: cosmwasm_std::OverflowOperation::Add,
-                operand1: unsettled_auction.lp_subdenom.to_string(),
-                operand2: 1.to_string(),
-            }),
-        )?;
+    let (messages, attributes) =
+        new_auction_round(deps, &env, info, Some(auction_winner), Some(auction_winning_bid))?;
 
-        let basket = unsettled_auction.basket;
-        let mut basket_fees = vec![];
-        let mut basket_to_treasure_chest = vec![];
-
-        // add the unused bidding balance to the basket to be redeemed later
-        // TODO: should this be taxed though? if not, move after the for loop
-        let remaining_bidding_balance =
-            BIDDING_BALANCE.load(deps.storage)?.checked_sub(auction_winning_bid)?;
-
-        if remaining_bidding_balance > Uint128::zero() {
-            basket_to_treasure_chest.push(Coin {
-                denom: config.native_denom.clone(),
-                amount: remaining_bidding_balance,
-            });
-        }
-
-        // split the basket, taking the rewards fees into account
-        for coin in basket.iter() {
-            let fee = coin.amount * config.rewards_fee;
-            basket_fees.push(Coin {
-                denom: coin.denom.clone(),
-                amount: fee,
-            });
-            basket_to_treasure_chest.push(Coin {
-                denom: coin.denom.clone(),
-                amount: coin.amount.checked_sub(fee)?,
-            });
-        }
-
-        // reset the bidding balance to 0 if we won, otherwise keep the balance for the next round
-        BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
-
-        let mut messages: Vec<CosmosMsg> = vec![];
-
-        // transfer corresponding tokens to the rewards fee address
-        messages.push(CosmosMsg::Bank(BankMsg::Send {
-            to_address: config.rewards_fee_addr.to_string(),
-            amount: basket_fees,
-        }));
-
-        // instantiate a treasury chest contract and get the future contract address
-        let creator = deps.api.addr_canonicalize(env.contract.address.as_str())?;
-        let code_id = config.treasury_chest_code_id;
-
-        let CodeInfoResponse {
-            code_id: _,
-            creator: _,
-            checksum,
-            ..
-        } = deps.querier.query_wasm_code_info(code_id)?;
-
-        let seed = format!(
-            "{}{}{}",
-            unsettled_auction.auction_round,
-            info.sender.into_string(),
-            env.block.height
-        );
-        let salt = Binary::from(seed.as_bytes());
-
-        let treasure_chest_address =
-            Addr::unchecked(instantiate2_address(&checksum, &creator, &salt)?.to_string());
-
-        let denom = format!("factory/{}/{}", env.contract.address, unsettled_auction.lp_subdenom);
-
-        messages.push(CosmosMsg::Wasm(WasmMsg::Instantiate2 {
-            admin: Some(env.contract.address.to_string()),
-            code_id,
-            label: format!("Treasure chest for auction round {}", unsettled_auction.auction_round),
-            msg: to_json_binary(&treasurechest::chest::InstantiateMsg {
-                denom: config.native_denom.clone(),
-                owner: env.contract.address.to_string(),
-                notes: denom.clone(),
-                token_factory: config.token_factory_type.to_string(),
-                burn_it: Some(false),
-            })?,
-            funds: basket_to_treasure_chest,
-            salt,
-        }));
-
-        TREASURE_CHEST_CONTRACTS.save(
-            deps.storage,
-            unsettled_auction.auction_round,
-            &treasure_chest_address,
-        )?;
-
-        // transfer previous token factory's admin rights to the treasury chest contract
-        messages.push(config.token_factory_type.change_admin(
-            env.contract.address.clone(),
-            &denom,
-            treasure_chest_address.clone(),
-        ));
-
-        // create a new denom for the current auction round
-        messages.push(
-            config
-                .token_factory_type
-                .create_denom(env.contract.address, new_subdenom.to_string().as_str()),
-        );
-
-        let basket = current_auction_round_response
-            .amount
-            .iter()
-            .map(|coin| Coin {
-                amount: Uint128::from_str(&coin.amount).expect("Failed to parse coin amount"),
-                denom: coin.denom.clone(),
-            })
-            .collect();
-
-        UNSETTLED_AUCTION.save(
-            deps.storage,
-            &Auction {
-                basket,
-                auction_round,
-                lp_subdenom: new_subdenom,
-                closing_time: current_auction_round_response.auction_closing_time(),
-            },
-        )?;
-
-        Ok(Response::default()
-            .add_messages(messages)
-            .add_attribute("action", "settle_auction".to_string())
-            .add_attribute("settled_action_round", unsettled_auction.auction_round.to_string())
-            .add_attribute("treasure_chest_address", treasure_chest_address.to_string())
-            .add_attribute("current_action_round", current_auction_round.to_string())
-            .add_attribute("new_subdenom", new_subdenom.to_string()))
-    }
-    // the contract did NOT win the auction
-    else {
-        // save the current auction details to the contract state, keeping the previous LP subdenom
-        UNSETTLED_AUCTION.save(
-            deps.storage,
-            &Auction {
-                basket: current_auction_round_response
-                    .amount
-                    .iter()
-                    .map(|coin| Coin {
-                        amount: Uint128::from_str(&coin.amount)
-                            .expect("Failed to parse coin amount"),
-                        denom: coin.denom.clone(),
-                    })
-                    .collect(),
-                auction_round: current_auction_round,
-                lp_subdenom: unsettled_auction.lp_subdenom,
-                closing_time: current_auction_round_response.auction_closing_time(),
-            },
-        )?;
-
-        Ok(Response::default()
-            .add_attribute("action", "settle_auction".to_string())
-            .add_attribute("settled_action_round", unsettled_auction.auction_round.to_string())
-            .add_attribute("current_action_round", current_auction_round.to_string()))
-    }
+    Ok(Response::default()
+        .add_attribute("action", "settle_auction")
+        .add_messages(messages)
+        .add_attributes(attributes))
 }

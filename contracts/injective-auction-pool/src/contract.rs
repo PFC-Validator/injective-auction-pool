@@ -1,6 +1,4 @@
-use std::str::FromStr;
-
-use cosmwasm_std::{entry_point, Addr, Coin, Uint128};
+use cosmwasm_std::{entry_point, to_json_binary, Addr};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw2::set_contract_version;
 
@@ -8,9 +6,9 @@ use injective_auction::auction_pool::{Config, ExecuteMsg, InstantiateMsg, QueryM
 
 use crate::error::ContractError;
 use crate::executions::{self, settle_auction};
-use crate::helpers::{query_current_auction, validate_percentage};
+use crate::helpers::{new_auction_round, validate_percentage};
 use crate::queries;
-use crate::state::{Auction, BIDDING_BALANCE, CONFIG, UNSETTLED_AUCTION};
+use crate::state::CONFIG;
 
 const CONTRACT_NAME: &str = "crates.io:injective-auction-pool";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -25,6 +23,16 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let owner = deps.api.addr_validate(&msg.owner.unwrap_or(info.sender.to_string()))?;
+    cw_ownable::initialize_owner(deps.storage, deps.api, Some(owner.to_string().as_str()))?;
+
+    // Ensure that the contract is funded with at least the minimum balance
+    let amount = cw_utils::must_pay(&info, &msg.native_denom)?;
+    if amount < msg.min_balance {
+        return Err(ContractError::InsufficientFunds {
+            native_denom: msg.native_denom,
+            min_balance: msg.min_balance,
+        });
+    }
 
     let whitelisted_addresses = msg
         .whitelisted_addresses
@@ -35,8 +43,8 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
-            owner,
             native_denom: msg.native_denom,
+            min_balance: msg.min_balance,
             token_factory_type: msg.token_factory_type.clone(),
             rewards_fee: validate_percentage(msg.rewards_fee)?,
             rewards_fee_addr: deps.api.addr_validate(&msg.rewards_fee_addr)?,
@@ -47,42 +55,12 @@ pub fn instantiate(
         },
     )?;
 
-    // fetch current auction details and save them in the contract state
-    let current_auction_round_response = query_current_auction(deps.as_ref())?;
-
-    let auction_round = current_auction_round_response
-        .auction_round
-        .ok_or(ContractError::CurrentAuctionQueryError)?;
-
-    let basket = current_auction_round_response
-        .amount
-        .iter()
-        .map(|coin| Coin {
-            amount: Uint128::from_str(&coin.amount).expect("Failed to parse coin amount"),
-            denom: coin.denom.clone(),
-        })
-        .collect();
-
-    UNSETTLED_AUCTION.save(
-        deps.storage,
-        &Auction {
-            basket,
-            auction_round,
-            lp_subdenom: 1,
-            closing_time: current_auction_round_response.auction_closing_time(),
-        },
-    )?;
-
-    BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
-
-    // create a new denom for the current auction round
-    let msg = msg.token_factory_type.create_denom(env.contract.address.clone(), "1");
+    let (messages, attributes) = new_auction_round(deps, &env, info, None, None)?;
 
     Ok(Response::default()
-        .add_message(msg)
+        .add_messages(messages)
         .add_attribute("action", "instantiate")
-        .add_attribute("auction_round", auction_round.to_string())
-        .add_attribute("lp_subdenom", "1"))
+        .add_attributes(attributes))
 }
 
 #[entry_point]
@@ -94,7 +72,6 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::UpdateConfig {
-            owner,
             rewards_fee,
             rewards_fee_addr,
             whitelist_addresses,
@@ -104,13 +81,16 @@ pub fn execute(
             deps,
             env,
             info,
-            owner,
             rewards_fee,
             rewards_fee_addr,
             whitelist_addresses,
             min_next_bid_increment_rate,
             min_return,
         ),
+        ExecuteMsg::UpdateOwnership(action) => {
+            cw_ownable::update_ownership(deps, &env.block, &info.sender, action)?;
+            Ok(Response::default())
+        },
         ExecuteMsg::TryBid {
             auction_round,
             basket_value,
@@ -132,6 +112,10 @@ pub fn execute(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => queries::query_config(deps),
+        QueryMsg::Ownership {} => {
+            let ownership = cw_ownable::get_ownership(deps.storage)?;
+            to_json_binary(&ownership)
+        },
         QueryMsg::TreasureChestContracts {
             start_after,
             limit,

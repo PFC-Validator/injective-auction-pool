@@ -1,11 +1,13 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Decimal, Uint128};
+use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: Option<String>,
     pub native_denom: String,
+    pub min_balance: Uint128,
     pub token_factory_type: TokenFactoryType,
     pub rewards_fee: Decimal,
     pub rewards_fee_addr: String,
@@ -15,11 +17,10 @@ pub struct InstantiateMsg {
     pub min_return: Decimal,
 }
 
+#[cw_ownable_execute]
 #[cw_serde]
 pub enum ExecuteMsg {
     UpdateConfig {
-        /// New owner of the contract
-        owner: Option<String>,
         /// Percentage of the rewards that the rewards fee address will take. Value is between 0 and 1
         rewards_fee: Option<Decimal>,
         /// Address to receive the rewards fee
@@ -58,6 +59,7 @@ pub enum ExecuteMsg {
     },
 }
 
+#[cw_ownable_query]
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
@@ -90,10 +92,10 @@ pub struct BiddingBalanceResponse {
 #[cw_serde]
 /// Config of the contract
 pub struct Config {
-    /// Owner of the contract
-    pub owner: Addr,
     /// Contract native denom
     pub native_denom: String,
+    /// Minimum balance to keep in the contract to create a new denoms
+    pub min_balance: Uint128,
     /// Token Factory Type for the contract
     pub token_factory_type: TokenFactoryType,
     /// Percentage of the rewards that the rewards fee address will take. Value is between 0 and 1
