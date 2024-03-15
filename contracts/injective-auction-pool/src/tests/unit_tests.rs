@@ -6,14 +6,17 @@ use cosmwasm_std::{
     ContractResult as CwContractResult, CosmosMsg, Decimal, Empty, Env, HexBinary, MemoryStorage,
     MessageInfo, OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, WasmMsg, WasmQuery,
 };
+use cw_ownable::Ownership;
 use injective_auction::auction::{Coin, MsgBid, QueryCurrentAuctionBasketResponse};
-use injective_auction::auction_pool::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use injective_auction::auction_pool::{
+    ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, WhitelistedAddressesResponse,
+};
 use prost::Message;
 use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 use crate::contract::{execute, instantiate, query};
-use crate::state::BIDDING_BALANCE;
+use crate::state::{BIDDING_BALANCE, FUNDS_LOCKED};
 use crate::ContractError;
 
 pub struct AuctionQuerier {
@@ -92,13 +95,14 @@ pub fn mock_deps_with_querier(
 }
 
 pub fn init() -> (OwnedDeps<MemoryStorage, MockApi, AuctionQuerier>, Env) {
-    let info = mock_info("instantiator", &coins(100, "denom"));
+    let info = mock_info("instantiator", &coins(2, "native_denom"));
     let mut deps = mock_deps_with_querier(&info);
     let env = mock_env();
 
     let msg = InstantiateMsg {
         owner: Some("owner".to_string()),
         native_denom: "native_denom".to_string(),
+        min_balance: Uint128::from(2u128),
         token_factory_type: TokenFactoryType::Injective,
         rewards_fee: Decimal::percent(10),
         rewards_fee_addr: "rewards_addr".to_string(),
@@ -111,15 +115,24 @@ pub fn init() -> (OwnedDeps<MemoryStorage, MockApi, AuctionQuerier>, Env) {
 
     assert_eq!(
         res.attributes,
-        vec![attr("action", "instantiate"), attr("auction_round", "1"), attr("lp_subdenom", "1"),]
+        vec![
+            attr("action", "instantiate"),
+            attr("new_auction_round", "1"),
+            attr("lp_subdenom", "auction.0"),
+        ]
     );
 
     assert_eq!(
         res.messages[0].msg,
-        TokenFactoryType::Injective.create_denom(env.contract.address.clone(), "1")
+        TokenFactoryType::Injective.create_denom(env.contract.address.clone(), "auction.0")
     );
 
     assert_eq!(BIDDING_BALANCE.load(&deps.storage).unwrap(), Uint128::zero());
+
+    let msg = QueryMsg::WhitelistedAddresses {};
+    let res: WhitelistedAddressesResponse =
+        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    assert_eq!(res.addresses, vec!["bot".to_string()]);
 
     (deps, env)
 }
@@ -131,23 +144,19 @@ fn update_config() {
     // update config as non-owner should fail
     let info = mock_info("not_owner", &[]);
     let msg = ExecuteMsg::UpdateConfig {
-        owner: None,
         rewards_fee: None,
         rewards_fee_addr: None,
-        whitelist_addresses: None,
         min_next_bid_increment_rate: None,
         min_return: None,
     };
     let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
-    assert_eq!(res, ContractError::Unauthorized {});
+    assert_eq!(res, ContractError::Ownership(cw_ownable::OwnershipError::NotOwner));
 
     // update some of the config fields as owner should work
     let info = mock_info("owner", &[]);
     let msg = ExecuteMsg::UpdateConfig {
-        owner: Some("new_owner".to_string()),
         rewards_fee: Some(Decimal::percent(20)),
         rewards_fee_addr: Some("new_rewards_addr".to_string()),
-        whitelist_addresses: Some(vec!["new_bot".to_string()]),
         min_next_bid_increment_rate: Some(Decimal::percent(10)),
         min_return: Some(Decimal::percent(10)),
     };
@@ -156,12 +165,10 @@ fn update_config() {
         res.attributes,
         vec![
             attr("action", "update_config"),
-            attr("owner", "new_owner"),
             attr("native_denom", "native_denom"),
             attr("token_factory_type", "Injective"),
             attr("rewards_fee", "0.2"),
             attr("rewards_fee_addr", "new_rewards_addr"),
-            attr("whitelisted_addresses", "new_bot"),
             attr("min_next_bid_increment_rate", "0.1"),
             attr("treasury_chest_code_id", "1"),
             attr("min_return", "0.1"),
@@ -172,12 +179,153 @@ fn update_config() {
     let msg = QueryMsg::Config {};
     let res: ConfigResponse = from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
     let config = res.config;
-    assert_eq!(config.owner, Addr::unchecked("new_owner"));
     assert_eq!(config.rewards_fee, Decimal::percent(20));
     assert_eq!(config.rewards_fee_addr, "new_rewards_addr".to_string());
-    assert_eq!(config.whitelisted_addresses, vec!["new_bot".to_string()]);
     assert_eq!(config.min_next_bid_increment_rate, Decimal::percent(10));
     assert_eq!(config.min_return, Decimal::percent(10));
+}
+
+#[test]
+fn update_ownership() {
+    let (mut deps, env) = init();
+
+    // update ownership as non-owner should fail
+    let info = mock_info("not_owner", &[]);
+    let msg = ExecuteMsg::UpdateOwnership(cw_ownable::Action::TransferOwnership {
+        new_owner: "new_owner".to_string(),
+        expiry: None,
+    });
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::Ownership(cw_ownable::OwnershipError::NotOwner));
+
+    // update ownership as owner should work
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateOwnership(cw_ownable::Action::TransferOwnership {
+        new_owner: "new_owner".to_string(),
+        expiry: None,
+    });
+    let _ = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap();
+
+    // ownership should not be updated until accepted
+    let msg = QueryMsg::Ownership {};
+    let res: Ownership<Addr> = from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    assert_eq!(res.owner.unwrap(), "owner");
+
+    // accept ownership as new_owner should work
+    let info = mock_info("new_owner", &[]);
+    let msg = ExecuteMsg::UpdateOwnership(cw_ownable::Action::AcceptOwnership {});
+    let _ = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap();
+
+    // query the ownership to check if it was updated
+    let msg = QueryMsg::Ownership {};
+    let res: Ownership<Addr> = from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    assert_eq!(res.owner.unwrap(), "new_owner");
+}
+
+#[test]
+fn add_whitelist_address() {
+    let (mut deps, env) = init();
+
+    // whitelist address as non-owner should fail
+    let info = mock_info("not_owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec![],
+        add: vec!["new_whitelisted".to_string()],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::Ownership(cw_ownable::OwnershipError::NotOwner));
+
+    // whitelist addresses as owner should work
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec![],
+        add: vec!["new_whitelisted".to_string(), "another_whitelisted".to_string()],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "update_whitelisted_addresses"),
+            attr("added_address", "new_whitelisted"),
+            attr("added_address", "another_whitelisted"),
+        ]
+    );
+
+    // whitelist an already whitelisted address should fail
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec![],
+        add: vec!["new_whitelisted".to_string()],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        ContractError::AddressAlreadyWhitelisted {
+            address: "new_whitelisted".to_string()
+        }
+    );
+
+    // query the whitelisted addresses to check if it was updated
+    let msg = QueryMsg::WhitelistedAddresses {};
+    let res: WhitelistedAddressesResponse =
+        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    assert_eq!(
+        res.addresses,
+        vec!["another_whitelisted".to_string(), "bot".to_string(), "new_whitelisted".to_string()]
+    );
+}
+
+#[test]
+fn remove_whitelisted_address() {
+    let (mut deps, env) = init();
+
+    // add a whitelisted address as an owner whould work
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec![],
+        add: vec!["new_whitelisted".to_string()],
+    };
+    let _ = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap();
+
+    // remove whitelisted address as non-owner should fail
+    let info = mock_info("not_owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec!["bot".to_string()],
+        add: vec![],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::Ownership(cw_ownable::OwnershipError::NotOwner));
+
+    // remove whitelisted address as owner should work
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec!["bot".to_string()],
+        add: vec![],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![attr("action", "update_whitelisted_addresses"), attr("removed_address", "bot"),]
+    );
+
+    // remove a non-existing whitelisted address should fail
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec!["not_whitelisted_address".to_string()],
+        add: vec![],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        ContractError::AddressNotWhitelisted {
+            address: "not_whitelisted_address".to_string()
+        }
+    );
+
+    // query the whitelisted addresses to check if it was updated
+    let msg = QueryMsg::WhitelistedAddresses {};
+    let res: WhitelistedAddressesResponse =
+        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    assert_eq!(res.addresses, vec![Addr::unchecked("new_whitelisted").to_string()]);
 }
 
 #[test]
@@ -194,8 +342,11 @@ pub fn join_pool_works() {
     // contracts mints 100 lp tokens to itself. Subdenom is 1 as it's the first auction
     assert_eq!(
         res.messages[0].msg,
-        TokenFactoryType::Injective
-            .mint(env.contract.address.clone(), "1", Uint128::from(100u128),)
+        TokenFactoryType::Injective.mint(
+            env.contract.address.clone(),
+            "auction.0",
+            Uint128::from(100u128),
+        )
     );
 
     // contract sends 100 lp tokens to the user
@@ -203,7 +354,7 @@ pub fn join_pool_works() {
         res.messages[1].msg,
         BankMsg::Send {
             to_address: "robinho".to_string(),
-            amount: coins(100, format!("factory/{}/{}", MOCK_CONTRACT_ADDR, 1)),
+            amount: coins(100, format!("factory/{}/{}", MOCK_CONTRACT_ADDR, "auction.0")),
         }
         .into()
     );
@@ -292,7 +443,8 @@ fn exit_pool_works() {
     };
     let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
 
-    let info = mock_info("robinho", &coins(100, format!("factory/{}/1", env.contract.address)));
+    let info =
+        mock_info("robinho", &coins(100, format!("factory/{}/auction.0", env.contract.address)));
     let msg = ExecuteMsg::ExitPool {};
 
     let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
@@ -302,7 +454,7 @@ fn exit_pool_works() {
         res.messages[0].msg,
         TokenFactoryType::Injective.burn(
             Addr::unchecked(MOCK_CONTRACT_ADDR),
-            format!("factory/{}/1", MOCK_CONTRACT_ADDR).as_str(),
+            format!("factory/{}/auction.0", MOCK_CONTRACT_ADDR).as_str(),
             Uint128::from(100u128),
         )
     );
@@ -323,7 +475,7 @@ fn exit_pool_works() {
 
 #[test]
 fn exit_pool_fails() {
-    let (mut deps, mut env) = init();
+    let (mut deps, env) = init();
 
     let info = mock_info("robinho", &coins(100, "native_denom"));
     let msg = ExecuteMsg::JoinPool {
@@ -338,7 +490,7 @@ fn exit_pool_fails() {
     assert_eq!(
         res,
         ContractError::PaymentError(cw_utils::PaymentError::MissingDenom(format!(
-            "factory/{MOCK_CONTRACT_ADDR}/1",
+            "factory/{MOCK_CONTRACT_ADDR}/auction.0",
         )))
     );
 
@@ -347,21 +499,16 @@ fn exit_pool_fails() {
     let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NoFunds {}));
 
-    // exit pool in T-1 day should fail
-    let info = mock_info("robinho", &coins(100, format!("factory/{}/1", env.contract.address)));
-    env.block.time = env.block.time.plus_seconds(6 * 86_400 + 1);
-    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
-    assert_eq!(res, ContractError::PooledAuctionLocked {});
+    // exit pool in T-1 day should work as the contract has not bid yet
+    let info =
+        mock_info("robinho", &coins(100, format!("factory/{}/auction.0", env.contract.address)));
 
-    // exit pool after T-1 day should work now
-    env.block.time = env.block.time.plus_seconds(86_400);
-
-    let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap();
     assert_eq!(
         res.messages[0].msg,
         TokenFactoryType::Injective.burn(
             Addr::unchecked(MOCK_CONTRACT_ADDR),
-            format!("factory/{}/1", MOCK_CONTRACT_ADDR).as_str(),
+            format!("factory/{}/auction.0", MOCK_CONTRACT_ADDR).as_str(),
             Uint128::from(100u128),
         )
     );
@@ -374,6 +521,11 @@ fn exit_pool_fails() {
         .into()
     );
     assert_eq!(res.attributes, vec![attr("action", "exit_pool")]);
+
+    // exit pool after the contract bid should fail
+    FUNDS_LOCKED.save(deps.as_mut().storage, &true).unwrap();
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap_err();
+    assert_eq!(res, ContractError::PooledAuctionLocked {});
 }
 
 #[test]
@@ -430,6 +582,8 @@ fn try_bid_works() {
         }
     );
     assert_eq!(res.attributes, vec![attr("action", "try_bid"), attr("amount", "20051"),]);
+
+    assert!(FUNDS_LOCKED.load(&deps.storage).unwrap());
 
     // try bid on a basket value that is lower than the highest bid should not fail but not bid either
     let info = mock_info("bot", &[]);
@@ -512,6 +666,7 @@ fn try_bid_fails() {
 }
 
 // TODO: to test settle auction, need to comment the line that checks if the auction round is valid on executions.rs
+//
 // use crate::state::{TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
 // #[test]
 // fn settle_auction_as_loser_works() {
@@ -544,8 +699,8 @@ fn try_bid_fails() {
 //         res.attributes,
 //         vec![
 //             attr("action", "settle_auction"),
-//             attr("settled_action_round", "0"),
-//             attr("current_action_round", "1"),
+//             attr("settled_auction_round", "0"),
+//             attr("new_auction_round", "1"),
 //         ]
 //     );
 
@@ -553,7 +708,10 @@ fn try_bid_fails() {
 //     assert_eq!(unsettled_auction.auction_round, 1);
 //     assert_eq!(unsettled_auction.basket, vec![coin(10_000, "uatom")]);
 //     assert_eq!(unsettled_auction.closing_time, 1_571_797_419 + 7 * 86_400);
-//     assert_eq!(unsettled_auction.lp_subdenom, 1);
+//     assert_eq!(unsettled_auction.lp_subdenom, 0);
+
+//     // funds should be released
+//     assert!(!FUNDS_LOCKED.load(deps.as_ref().storage).unwrap());
 // }
 
 // #[test]
@@ -571,6 +729,7 @@ fn try_bid_fails() {
 //     // mock the auction round to be 0 so the contract thinks the auction round is over
 //     let mut unsettled_auction = UNSETTLED_AUCTION.load(deps.as_ref().storage).unwrap();
 //     unsettled_auction.auction_round = 0;
+//     unsettled_auction.lp_subdenom = 1;
 //     UNSETTLED_AUCTION.save(deps.as_mut().storage, &unsettled_auction).unwrap();
 //     env.block.time = env.block.time.plus_days(7);
 
@@ -602,7 +761,7 @@ fn try_bid_fails() {
 //             msg: to_json_binary(&treasurechest::chest::InstantiateMsg {
 //                 denom: "native_denom".to_string(),
 //                 owner: "cosmos2contract".to_string(),
-//                 notes: "factory/cosmos2contract/1".to_string(),
+//                 notes: "factory/cosmos2contract/auction.1".to_string(),
 //                 token_factory: TokenFactoryType::Injective.to_string(),
 //                 burn_it: Some(false)
 //             })
@@ -627,28 +786,31 @@ fn try_bid_fails() {
 //         res.messages[2].msg,
 //         TokenFactoryType::Injective.change_admin(
 //             Addr::unchecked("cosmos2contract"),
-//             "factory/cosmos2contract/1",
+//             "factory/cosmos2contract/auction.1",
 //             treasure_chest_addr
 //         )
 //     );
 
 //     assert_eq!(
 //         res.messages[3].msg,
-//         TokenFactoryType::Injective.create_denom(Addr::unchecked(MOCK_CONTRACT_ADDR), "2")
+//         TokenFactoryType::Injective.create_denom(Addr::unchecked(MOCK_CONTRACT_ADDR), "auction.2")
 //     );
 
 //     assert_eq!(
 //         res.attributes,
 //         vec![
 //             attr("action", "settle_auction"),
-//             attr("settled_action_round", "0"),
+//             attr("settled_auction_round", "0"),
+//             attr("new_auction_round", "1"),
 //             attr(
 //                 "treasure_chest_address",
 //                 // this is a mock address, as the checksum was invented
 //                 "ED9963158CC851609F6BCFE30C3256F3471F11E3087F6DB5244B1FE5659757C4"
 //             ),
-//             attr("current_action_round", "1"),
-//             attr("new_subdenom", "2"),
+//             attr("new_subdenom", "auction.2"),
 //         ]
 //     );
+
+//     // funds should be released
+//     assert!(!FUNDS_LOCKED.load(deps.as_ref().storage).unwrap());
 // }

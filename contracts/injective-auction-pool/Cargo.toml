@@ -33,6 +33,7 @@ prost = { workspace = true }
 cw-utils = { workspace = true }
 treasurechest = { workspace = true }
 cw-paginate-storage = { workspace = true }
+cw-ownable = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }
