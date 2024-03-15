@@ -78,6 +78,8 @@ pub enum QueryMsg {
     },
     #[returns(BiddingBalanceResponse)]
     BiddingBalance {},
+    #[returns(FundsLockedResponse)]
+    FundsLocked {},
 }
 
 #[cw_serde]
@@ -98,6 +100,11 @@ pub struct TreasureChestContractsResponse {
 #[cw_serde]
 pub struct BiddingBalanceResponse {
     pub bidding_balance: Uint128,
+}
+
+#[cw_serde]
+pub struct FundsLockedResponse {
+    pub funds_locked: bool,
 }
 
 #[cw_serde]

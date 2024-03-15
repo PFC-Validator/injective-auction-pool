@@ -127,5 +127,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             limit,
         } => queries::query_treasure_chest_contracts(deps, start_after, limit),
         QueryMsg::BiddingBalance {} => queries::query_bidding_balance(deps),
+        QueryMsg::FundsLocked {} => to_json_binary(&FUNDS_LOCKED.load(deps.storage)?),
     }
 }
