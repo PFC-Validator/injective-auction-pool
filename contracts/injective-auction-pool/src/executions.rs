@@ -1,6 +1,6 @@
 use crate::helpers::{new_auction_round, query_current_auction, validate_percentage};
 use crate::state::{
-    Whitelisted, BIDDING_BALANCE, CONFIG, UNSETTLED_AUCTION, WHITELISTED_ADDRESSES,
+    Whitelisted, BIDDING_BALANCE, CONFIG, FUNDS_LOCKED, UNSETTLED_AUCTION, WHITELISTED_ADDRESSES,
 };
 use crate::ContractError;
 use cosmwasm_std::{
@@ -9,8 +9,6 @@ use cosmwasm_std::{
 };
 use injective_auction::auction::MsgBid;
 use injective_auction::auction_pool::ExecuteMsg::TryBid;
-
-const DAY_IN_SECONDS: u64 = 86400;
 
 pub fn update_config(
     deps: DepsMut,
@@ -179,16 +177,11 @@ pub(crate) fn exit_pool(
     );
     let amount = cw_utils::must_pay(&info, lp_denom.as_str())?;
 
-    // prevents the user from exiting the pool in the last day of the auction
-    if current_auction_round_response
-        .auction_closing_time()
-        .saturating_sub(env.block.time.seconds())
-        < DAY_IN_SECONDS
+    // prevents the user from exiting the pool if the contract has already bid on the auction
+    if FUNDS_LOCKED.load(deps.storage)?
         && env.block.time.seconds() < current_auction_round_response.auction_closing_time()
     {
-        {
-            return Err(ContractError::PooledAuctionLocked);
-        }
+        return Err(ContractError::PooledAuctionLocked);
     }
 
     // subtract the amount of INJ to send from the bidding balance
@@ -288,6 +281,9 @@ pub(crate) fn try_bid(
         round: auction_round,
     });
 
+    // lock the funds to prevent users from exiting the pool
+    FUNDS_LOCKED.save(deps.storage, &true)?;
+
     Ok(Response::default()
         .add_message(msg)
         .add_attribute("action", "try_bid".to_string())
@@ -328,6 +324,8 @@ pub fn settle_auction(
     if current_auction_round == unsettled_auction.auction_round {
         return Err(ContractError::AuctionRoundHasNotFinished);
     }
+
+    FUNDS_LOCKED.save(deps.storage, &false)?;
 
     let (messages, attributes) =
         new_auction_round(deps, &env, info, Some(auction_winner), Some(auction_winning_bid))?;

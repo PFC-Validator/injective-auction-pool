@@ -8,7 +8,7 @@ use crate::error::ContractError;
 use crate::executions::{self, settle_auction};
 use crate::helpers::{new_auction_round, validate_percentage};
 use crate::queries;
-use crate::state::{Whitelisted, CONFIG, WHITELISTED_ADDRESSES};
+use crate::state::{Whitelisted, CONFIG, FUNDS_LOCKED, WHITELISTED_ADDRESSES};
 
 const CONTRACT_NAME: &str = "crates.io:injective-auction-pool";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -55,6 +55,8 @@ pub fn instantiate(
             min_return: validate_percentage(msg.min_return)?,
         },
     )?;
+
+    FUNDS_LOCKED.save(deps.storage, &false)?;
 
     let (messages, attributes) = new_auction_round(deps, &env, info, None, None)?;
 

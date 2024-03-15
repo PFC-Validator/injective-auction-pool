@@ -28,3 +28,5 @@ pub const BIDDING_BALANCE: Item<Uint128> = Item::new("bidding_balance");
 pub const UNSETTLED_AUCTION: Item<Auction> = Item::new("usnsettled_auction");
 /// Maps the auction round to the treasure chest contract address
 pub const TREASURE_CHEST_CONTRACTS: Map<u64, Addr> = Map::new("treasure_chest_contracts");
+/// Stores whether the funds can be withdrawn or not from the contract
+pub const FUNDS_LOCKED: Item<bool> = Item::new("funds_locked");

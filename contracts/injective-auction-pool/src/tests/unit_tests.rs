@@ -16,7 +16,7 @@ use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 use crate::contract::{execute, instantiate, query};
-use crate::state::BIDDING_BALANCE;
+use crate::state::{BIDDING_BALANCE, FUNDS_LOCKED};
 use crate::ContractError;
 
 pub struct AuctionQuerier {
@@ -475,7 +475,7 @@ fn exit_pool_works() {
 
 #[test]
 fn exit_pool_fails() {
-    let (mut deps, mut env) = init();
+    let (mut deps, env) = init();
 
     let info = mock_info("robinho", &coins(100, "native_denom"));
     let msg = ExecuteMsg::JoinPool {
@@ -499,17 +499,11 @@ fn exit_pool_fails() {
     let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NoFunds {}));
 
-    // exit pool in T-1 day should fail
+    // exit pool in T-1 day should work as the contract has not bid yet
     let info =
         mock_info("robinho", &coins(100, format!("factory/{}/auction.0", env.contract.address)));
-    env.block.time = env.block.time.plus_seconds(6 * 86_400 + 1);
-    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap_err();
-    assert_eq!(res, ContractError::PooledAuctionLocked {});
 
-    // exit pool after T-1 day should work now
-    env.block.time = env.block.time.plus_seconds(86_400);
-
-    let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap();
     assert_eq!(
         res.messages[0].msg,
         TokenFactoryType::Injective.burn(
@@ -527,6 +521,11 @@ fn exit_pool_fails() {
         .into()
     );
     assert_eq!(res.attributes, vec![attr("action", "exit_pool")]);
+
+    // exit pool after the contract bid should fail
+    FUNDS_LOCKED.save(deps.as_mut().storage, &true).unwrap();
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap_err();
+    assert_eq!(res, ContractError::PooledAuctionLocked {});
 }
 
 #[test]
@@ -583,6 +582,8 @@ fn try_bid_works() {
         }
     );
     assert_eq!(res.attributes, vec![attr("action", "try_bid"), attr("amount", "20051"),]);
+
+    assert!(FUNDS_LOCKED.load(&deps.storage).unwrap());
 
     // try bid on a basket value that is lower than the highest bid should not fail but not bid either
     let info = mock_info("bot", &[]);
@@ -665,6 +666,7 @@ fn try_bid_fails() {
 }
 
 // TODO: to test settle auction, need to comment the line that checks if the auction round is valid on executions.rs
+//
 // use crate::state::{TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
 // #[test]
 // fn settle_auction_as_loser_works() {
@@ -707,6 +709,9 @@ fn try_bid_fails() {
 //     assert_eq!(unsettled_auction.basket, vec![coin(10_000, "uatom")]);
 //     assert_eq!(unsettled_auction.closing_time, 1_571_797_419 + 7 * 86_400);
 //     assert_eq!(unsettled_auction.lp_subdenom, 0);
+
+//     // funds should be released
+//     assert!(!FUNDS_LOCKED.load(deps.as_ref().storage).unwrap());
 // }
 
 // #[test]
@@ -756,7 +761,7 @@ fn try_bid_fails() {
 //             msg: to_json_binary(&treasurechest::chest::InstantiateMsg {
 //                 denom: "native_denom".to_string(),
 //                 owner: "cosmos2contract".to_string(),
-//                 notes: "factory/cosmos2contract/1".to_string(),
+//                 notes: "factory/cosmos2contract/auction.1".to_string(),
 //                 token_factory: TokenFactoryType::Injective.to_string(),
 //                 burn_it: Some(false)
 //             })
@@ -781,14 +786,14 @@ fn try_bid_fails() {
 //         res.messages[2].msg,
 //         TokenFactoryType::Injective.change_admin(
 //             Addr::unchecked("cosmos2contract"),
-//             "factory/cosmos2contract/1",
+//             "factory/cosmos2contract/auction.1",
 //             treasure_chest_addr
 //         )
 //     );
 
 //     assert_eq!(
 //         res.messages[3].msg,
-//         TokenFactoryType::Injective.create_denom(Addr::unchecked(MOCK_CONTRACT_ADDR), "2")
+//         TokenFactoryType::Injective.create_denom(Addr::unchecked(MOCK_CONTRACT_ADDR), "auction.2")
 //     );
 
 //     assert_eq!(
@@ -802,7 +807,10 @@ fn try_bid_fails() {
 //                 // this is a mock address, as the checksum was invented
 //                 "ED9963158CC851609F6BCFE30C3256F3471F11E3087F6DB5244B1FE5659757C4"
 //             ),
-//             attr("new_subdenom", "2"),
+//             attr("new_subdenom", "auction.2"),
 //         ]
 //     );
+
+//     // funds should be released
+//     assert!(!FUNDS_LOCKED.load(deps.as_ref().storage).unwrap());
 // }
