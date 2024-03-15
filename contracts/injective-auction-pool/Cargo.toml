@@ -1,12 +1,8 @@
 [package]
 name = "injective-auction-pool"
 description = "Smart contract that allows for community members to pool together INJ to participate in burn auctions"
-authors = [
-    "Kerber0x <kerber0x@protonmail.com>",
-    "Nahem <nahemseguias@gmail.com>",
-    "PFC <pfc@pfc.zone>",
-]
-version = "0.1.0"
+authors = { workspace = true }
+version = { workspace = true }
 
 edition = { workspace = true }
 license = { workspace = true }

@@ -3,8 +3,11 @@ members = ["contracts/*", "integration", "packages/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1"
-authors = ["PFC <pfc@pfc.zone>"]
+version = "0.1.1"
+authors = [
+  "Kerber0x <kerber0x@protonmail.com>",
+  "Nahem <nahemseguias@gmail.com>",
+  "PFC <pfc@pfc.zone>"]
 edition = "2021"
 rust-version = "1.73.0"
 license = "Apache-2.0"

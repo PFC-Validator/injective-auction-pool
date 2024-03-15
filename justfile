@@ -7,6 +7,8 @@ clippy:
 fmt:
   cargo  +nightly fmt
 
+coverage:
+   cargo +nightly tarpaulin
 test:
   cargo test
 
