@@ -25,12 +25,16 @@ pub enum ExecuteMsg {
         rewards_fee: Option<Decimal>,
         /// Address to receive the rewards fee
         rewards_fee_addr: Option<String>,
-        /// Addresses that are allowed to call TriBid on the copntract
-        whitelist_addresses: Option<Vec<String>>,
         /// Minimum next bid increment rate for the auction. Value is between 0 and 1
         min_next_bid_increment_rate: Option<Decimal>,
         /// The minimum return allowed in percentage. 5% means the contract cannot bid for more than 95% of the basket value
         min_return: Option<Decimal>,
+    },
+    /// Updates the whitelisted addresses that can bid on or settle the auction.
+    /// Remove is applied after add, so if an address is in both, it is removed
+    UpdateWhiteListedAddresses {
+        remove: Vec<String>,
+        add: Vec<String>,
     },
     /// Makes the contract bid on the auction. This is to be called by the any whitelisted address.
     TryBid {
@@ -65,6 +69,8 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
+    #[returns(WhitelistedAddressesResponse)]
+    WhitelistedAddresses {},
     #[returns(TreasureChestContractsResponse)]
     TreasureChestContracts {
         start_after: Option<u64>,
@@ -77,6 +83,11 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct ConfigResponse {
     pub config: Config,
+}
+
+#[cw_serde]
+pub struct WhitelistedAddressesResponse {
+    pub addresses: Vec<String>,
 }
 
 #[cw_serde]
@@ -102,8 +113,6 @@ pub struct Config {
     pub rewards_fee: Decimal,
     /// Address to receive the rewards fee
     pub rewards_fee_addr: Addr,
-    /// Addresses that are allowed to bid on the auction
-    pub whitelisted_addresses: Vec<Addr>,
     /// Minimum next bid increment rate for the auction
     pub min_next_bid_increment_rate: Decimal,
     /// Treasury chest code id to instantiate a new treasury chest contract

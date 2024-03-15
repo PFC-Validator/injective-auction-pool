@@ -15,9 +15,14 @@ pub struct Auction {
     pub closing_time: u64,
 }
 
+#[cw_serde]
+pub struct Whitelisted;
+
 /// Stores the config of the contract
 pub const CONFIG: Item<Config> = Item::new("config");
-/// Available balance to be used for bidding
+/// Whitelisted addresses that can call TryBid
+pub const WHITELISTED_ADDRESSES: Map<&Addr, Whitelisted> = Map::new("whitelisted_addresses");
+/// Stores the available balance that can be used for bidding
 pub const BIDDING_BALANCE: Item<Uint128> = Item::new("bidding_balance");
 /// Stores the current auction details
 pub const UNSETTLED_AUCTION: Item<Auction> = Item::new("usnsettled_auction");

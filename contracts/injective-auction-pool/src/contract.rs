@@ -1,4 +1,4 @@
-use cosmwasm_std::{entry_point, to_json_binary, Addr};
+use cosmwasm_std::{attr, entry_point, to_json_binary, Attribute};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw2::set_contract_version;
 
@@ -8,7 +8,7 @@ use crate::error::ContractError;
 use crate::executions::{self, settle_auction};
 use crate::helpers::{new_auction_round, validate_percentage};
 use crate::queries;
-use crate::state::CONFIG;
+use crate::state::{Whitelisted, CONFIG, WHITELISTED_ADDRESSES};
 
 const CONTRACT_NAME: &str = "crates.io:injective-auction-pool";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -34,11 +34,13 @@ pub fn instantiate(
         });
     }
 
-    let whitelisted_addresses = msg
-        .whitelisted_addresses
-        .iter()
-        .map(|addr| deps.api.addr_validate(addr))
-        .collect::<Result<Vec<Addr>, _>>()?;
+    let mut whitelisted: Vec<Attribute> = vec![];
+
+    for addr in msg.whitelisted_addresses {
+        let addr = deps.api.addr_validate(&addr)?;
+        WHITELISTED_ADDRESSES.save(deps.storage, &addr, &Whitelisted {})?;
+        whitelisted.push(attr("whitelisted_address", addr.to_string()));
+    }
 
     CONFIG.save(
         deps.storage,
@@ -48,7 +50,6 @@ pub fn instantiate(
             token_factory_type: msg.token_factory_type.clone(),
             rewards_fee: validate_percentage(msg.rewards_fee)?,
             rewards_fee_addr: deps.api.addr_validate(&msg.rewards_fee_addr)?,
-            whitelisted_addresses,
             min_next_bid_increment_rate: validate_percentage(msg.min_next_bid_increment_rate)?,
             treasury_chest_code_id: msg.treasury_chest_code_id,
             min_return: validate_percentage(msg.min_return)?,
@@ -74,7 +75,6 @@ pub fn execute(
         ExecuteMsg::UpdateConfig {
             rewards_fee,
             rewards_fee_addr,
-            whitelist_addresses,
             min_next_bid_increment_rate,
             min_return,
         } => executions::update_config(
@@ -83,7 +83,6 @@ pub fn execute(
             info,
             rewards_fee,
             rewards_fee_addr,
-            whitelist_addresses,
             min_next_bid_increment_rate,
             min_return,
         ),
@@ -91,6 +90,10 @@ pub fn execute(
             cw_ownable::update_ownership(deps, &env.block, &info.sender, action)?;
             Ok(Response::default())
         },
+        ExecuteMsg::UpdateWhiteListedAddresses {
+            remove,
+            add,
+        } => executions::update_whitelisted_addresses(deps, env, info, remove, add),
         ExecuteMsg::TryBid {
             auction_round,
             basket_value,
@@ -112,6 +115,7 @@ pub fn execute(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => queries::query_config(deps),
+        QueryMsg::WhitelistedAddresses {} => queries::query_whitelisted_addresses(deps),
         QueryMsg::Ownership {} => {
             let ownership = cw_ownable::get_ownership(deps.storage)?;
             to_json_binary(&ownership)

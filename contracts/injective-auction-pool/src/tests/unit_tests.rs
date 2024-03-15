@@ -8,7 +8,9 @@ use cosmwasm_std::{
 };
 use cw_ownable::Ownership;
 use injective_auction::auction::{Coin, MsgBid, QueryCurrentAuctionBasketResponse};
-use injective_auction::auction_pool::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use injective_auction::auction_pool::{
+    ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, WhitelistedAddressesResponse,
+};
 use prost::Message;
 use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
@@ -127,6 +129,11 @@ pub fn init() -> (OwnedDeps<MemoryStorage, MockApi, AuctionQuerier>, Env) {
 
     assert_eq!(BIDDING_BALANCE.load(&deps.storage).unwrap(), Uint128::zero());
 
+    let msg = QueryMsg::WhitelistedAddresses {};
+    let res: WhitelistedAddressesResponse =
+        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    assert_eq!(res.addresses, vec!["bot".to_string()]);
+
     (deps, env)
 }
 
@@ -139,7 +146,6 @@ fn update_config() {
     let msg = ExecuteMsg::UpdateConfig {
         rewards_fee: None,
         rewards_fee_addr: None,
-        whitelist_addresses: None,
         min_next_bid_increment_rate: None,
         min_return: None,
     };
@@ -151,7 +157,6 @@ fn update_config() {
     let msg = ExecuteMsg::UpdateConfig {
         rewards_fee: Some(Decimal::percent(20)),
         rewards_fee_addr: Some("new_rewards_addr".to_string()),
-        whitelist_addresses: Some(vec!["new_bot".to_string()]),
         min_next_bid_increment_rate: Some(Decimal::percent(10)),
         min_return: Some(Decimal::percent(10)),
     };
@@ -164,7 +169,6 @@ fn update_config() {
             attr("token_factory_type", "Injective"),
             attr("rewards_fee", "0.2"),
             attr("rewards_fee_addr", "new_rewards_addr"),
-            attr("whitelisted_addresses", "new_bot"),
             attr("min_next_bid_increment_rate", "0.1"),
             attr("treasury_chest_code_id", "1"),
             attr("min_return", "0.1"),
@@ -177,7 +181,6 @@ fn update_config() {
     let config = res.config;
     assert_eq!(config.rewards_fee, Decimal::percent(20));
     assert_eq!(config.rewards_fee_addr, "new_rewards_addr".to_string());
-    assert_eq!(config.whitelisted_addresses, vec!["new_bot".to_string()]);
     assert_eq!(config.min_next_bid_increment_rate, Decimal::percent(10));
     assert_eq!(config.min_return, Decimal::percent(10));
 }
@@ -217,6 +220,112 @@ fn update_ownership() {
     let msg = QueryMsg::Ownership {};
     let res: Ownership<Addr> = from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
     assert_eq!(res.owner.unwrap(), "new_owner");
+}
+
+#[test]
+fn add_whitelist_address() {
+    let (mut deps, env) = init();
+
+    // whitelist address as non-owner should fail
+    let info = mock_info("not_owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec![],
+        add: vec!["new_whitelisted".to_string()],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::Ownership(cw_ownable::OwnershipError::NotOwner));
+
+    // whitelist addresses as owner should work
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec![],
+        add: vec!["new_whitelisted".to_string(), "another_whitelisted".to_string()],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg.clone()).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "update_whitelisted_addresses"),
+            attr("added_address", "new_whitelisted"),
+            attr("added_address", "another_whitelisted"),
+        ]
+    );
+
+    // whitelist an already whitelisted address should fail
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec![],
+        add: vec!["new_whitelisted".to_string()],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        ContractError::AddressAlreadyWhitelisted {
+            address: "new_whitelisted".to_string()
+        }
+    );
+
+    // query the whitelisted addresses to check if it was updated
+    let msg = QueryMsg::WhitelistedAddresses {};
+    let res: WhitelistedAddressesResponse =
+        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    assert_eq!(
+        res.addresses,
+        vec!["another_whitelisted".to_string(), "bot".to_string(), "new_whitelisted".to_string()]
+    );
+}
+
+#[test]
+fn remove_whitelisted_address() {
+    let (mut deps, env) = init();
+
+    // add a whitelisted address as an owner whould work
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec![],
+        add: vec!["new_whitelisted".to_string()],
+    };
+    let _ = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap();
+
+    // remove whitelisted address as non-owner should fail
+    let info = mock_info("not_owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec!["bot".to_string()],
+        add: vec![],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::Ownership(cw_ownable::OwnershipError::NotOwner));
+
+    // remove whitelisted address as owner should work
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec!["bot".to_string()],
+        add: vec![],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![attr("action", "update_whitelisted_addresses"), attr("removed_address", "bot"),]
+    );
+
+    // remove a non-existing whitelisted address should fail
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateWhiteListedAddresses {
+        remove: vec!["not_whitelisted_address".to_string()],
+        add: vec![],
+    };
+    let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        ContractError::AddressNotWhitelisted {
+            address: "not_whitelisted_address".to_string()
+        }
+    );
+
+    // query the whitelisted addresses to check if it was updated
+    let msg = QueryMsg::WhitelistedAddresses {};
+    let res: WhitelistedAddressesResponse =
+        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    assert_eq!(res.addresses, vec![Addr::unchecked("new_whitelisted").to_string()]);
 }
 
 #[test]

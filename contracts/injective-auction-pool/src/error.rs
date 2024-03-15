@@ -65,4 +65,14 @@ pub enum ContractError {
 
     #[error(transparent)]
     Ownership(#[from] OwnershipError),
+
+    #[error("Address already whitelisted: {address}")]
+    AddressAlreadyWhitelisted {
+        address: String,
+    },
+
+    #[error("Address not whitelisted: {address}")]
+    AddressNotWhitelisted {
+        address: String,
+    },
 }

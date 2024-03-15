@@ -1,8 +1,10 @@
 use crate::helpers::{new_auction_round, query_current_auction, validate_percentage};
-use crate::state::{BIDDING_BALANCE, CONFIG, UNSETTLED_AUCTION};
+use crate::state::{
+    Whitelisted, BIDDING_BALANCE, CONFIG, UNSETTLED_AUCTION, WHITELISTED_ADDRESSES,
+};
 use crate::ContractError;
 use cosmwasm_std::{
-    coins, to_json_binary, Addr, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response,
+    attr, coins, to_json_binary, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response,
     Uint128, WasmMsg,
 };
 use injective_auction::auction::MsgBid;
@@ -16,7 +18,6 @@ pub fn update_config(
     info: MessageInfo,
     rewards_fee: Option<Decimal>,
     rewards_fee_addr: Option<String>,
-    whitelist_addresses: Option<Vec<String>>,
     min_next_bid_increment_rate: Option<Decimal>,
     min_return: Option<Decimal>,
 ) -> Result<Response, ContractError> {
@@ -30,13 +31,6 @@ pub fn update_config(
 
     if let Some(rewards_fee_addr) = rewards_fee_addr {
         config.rewards_fee_addr = deps.api.addr_validate(&rewards_fee_addr)?;
-    }
-
-    if let Some(whitelist_addresses) = whitelist_addresses {
-        config.whitelisted_addresses = whitelist_addresses
-            .iter()
-            .map(|addr| deps.api.addr_validate(addr))
-            .collect::<Result<Vec<Addr>, _>>()?;
     }
 
     if let Some(min_next_bid_increment_rate) = min_next_bid_increment_rate {
@@ -56,20 +50,52 @@ pub fn update_config(
         .add_attribute("rewards_fee", config.rewards_fee.to_string())
         .add_attribute("rewards_fee_addr", config.rewards_fee_addr.to_string())
         .add_attribute(
-            "whitelisted_addresses",
-            config
-                .whitelisted_addresses
-                .iter()
-                .map(|addr| addr.to_string())
-                .collect::<Vec<String>>()
-                .join(","),
-        )
-        .add_attribute(
             "min_next_bid_increment_rate",
             config.min_next_bid_increment_rate.to_string(),
         )
         .add_attribute("treasury_chest_code_id", config.treasury_chest_code_id.to_string())
         .add_attribute("min_return", config.min_return.to_string()))
+}
+
+pub fn update_whitelisted_addresses(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    remove: Vec<String>,
+    add: Vec<String>,
+) -> Result<Response, ContractError> {
+    cw_ownable::assert_owner(deps.storage, &info.sender)?;
+
+    let mut added = vec![];
+    for addr in add.clone().into_iter() {
+        let add_addr = deps.api.addr_validate(&addr)?;
+        if !WHITELISTED_ADDRESSES.has(deps.storage, &add_addr) {
+            WHITELISTED_ADDRESSES.save(deps.storage, &add_addr, &Whitelisted)?;
+            added.push(attr("added_address", addr));
+        } else {
+            return Err(ContractError::AddressAlreadyWhitelisted {
+                address: addr,
+            });
+        }
+    }
+
+    let mut removed = vec![];
+    for addr in remove.clone().into_iter() {
+        let remove_addr = deps.api.addr_validate(&addr)?;
+        if WHITELISTED_ADDRESSES.has(deps.storage, &remove_addr) {
+            WHITELISTED_ADDRESSES.remove(deps.storage, &remove_addr);
+            removed.push(attr("removed_address", addr));
+        } else {
+            return Err(ContractError::AddressNotWhitelisted {
+                address: addr,
+            });
+        }
+    }
+
+    Ok(Response::default()
+        .add_attribute("action", "update_whitelisted_addresses")
+        .add_attributes(removed)
+        .add_attributes(added))
 }
 
 /// Joins the pool
@@ -202,9 +228,11 @@ pub(crate) fn try_bid(
 
     // only whitelist addresses or the contract itself can bid on the auction
     let config = CONFIG.load(deps.storage)?;
-    if info.sender != env.contract.address && !config.whitelisted_addresses.contains(&info.sender) {
+    if info.sender != env.contract.address && !WHITELISTED_ADDRESSES.has(deps.storage, &info.sender)
+    {
         return Err(ContractError::Unauthorized {});
     }
+
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
     let current_auction_round = current_auction_round_response
         .auction_round
@@ -276,8 +304,7 @@ pub fn settle_auction(
 ) -> Result<Response, ContractError> {
     // only whitelist addresses can settle the auction for now until the
     // contract can query the aunction module for a specific auction round
-    let config = CONFIG.load(deps.storage)?;
-    if !config.whitelisted_addresses.contains(&info.sender) {
+    if !WHITELISTED_ADDRESSES.has(deps.storage, &info.sender) {
         return Err(ContractError::Unauthorized {});
     }
 
