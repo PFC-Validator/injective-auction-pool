@@ -21,13 +21,15 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     UpdateConfig {
-        /// Percentage of the rewards that the rewards fee address will take. Value is between 0 and 1
+        /// Percentage of the rewards that the rewards fee address will take. Value is between 0
+        /// and 1
         rewards_fee: Option<Decimal>,
         /// Address to receive the rewards fee
         rewards_fee_addr: Option<String>,
         /// Minimum next bid increment rate for the auction. Value is between 0 and 1
         min_next_bid_increment_rate: Option<Decimal>,
-        /// The minimum return allowed in percentage. 5% means the contract cannot bid for more than 95% of the basket value
+        /// The minimum return allowed in percentage. 5% means the contract cannot bid for more
+        /// than 95% of the basket value
         min_return: Option<Decimal>,
     },
     /// Updates the whitelisted addresses that can bid on or settle the auction.
@@ -52,7 +54,8 @@ pub enum ExecuteMsg {
     },
     /// Can be called by the user before T-1 day from auction's end to exit the auction.
     ExitPool {},
-    /// Settles the auction, sending the rewards to the vault in case the contract won the auction. Called by the bot.
+    /// Settles the auction, sending the rewards to the vault in case the contract won the auction.
+    /// Called by the bot.
     SettleAuction {
         /// The auction round to settle
         auction_round: u64,
@@ -124,6 +127,7 @@ pub struct Config {
     pub min_next_bid_increment_rate: Decimal,
     /// Treasury chest code id to instantiate a new treasury chest contract
     pub treasury_chest_code_id: u64,
-    /// The minimum return allowed in percentage. 5% means the contract cannot bid for more than 95% of the basket value
+    /// The minimum return allowed in percentage. 5% means the contract cannot bid for more than
+    /// 95% of the basket value
     pub min_return: Decimal,
 }

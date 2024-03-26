@@ -1,23 +1,27 @@
-use cosmwasm_std::testing::{
-    mock_env, mock_info, BankQuerier, MockApi, MockStorage, MOCK_CONTRACT_ADDR,
-};
+use std::marker::PhantomData;
+
 use cosmwasm_std::{
-    attr, coin, coins, from_json, to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse,
-    ContractResult as CwContractResult, CosmosMsg, Decimal, Empty, Env, HexBinary, MemoryStorage,
-    MessageInfo, OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, WasmMsg, WasmQuery,
+    attr, coin, coins, from_json,
+    testing::{mock_env, mock_info, BankQuerier, MockApi, MockStorage, MOCK_CONTRACT_ADDR},
+    to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse, ContractResult as CwContractResult,
+    CosmosMsg, Decimal, Empty, Env, HexBinary, MemoryStorage, MessageInfo, OwnedDeps, Querier,
+    QuerierResult, QueryRequest, Uint128, WasmMsg, WasmQuery,
 };
 use cw_ownable::Ownership;
-use injective_auction::auction::{Coin, MsgBid, QueryCurrentAuctionBasketResponse};
-use injective_auction::auction_pool::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, WhitelistedAddressesResponse,
+use injective_auction::{
+    auction::{Coin, MsgBid, QueryCurrentAuctionBasketResponse},
+    auction_pool::{
+        ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, WhitelistedAddressesResponse,
+    },
 };
 use prost::Message;
-use std::marker::PhantomData;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
-use crate::contract::{execute, instantiate, query};
-use crate::state::{BIDDING_BALANCE, FUNDS_LOCKED};
-use crate::ContractError;
+use crate::{
+    contract::{execute, instantiate, query},
+    state::{BIDDING_BALANCE, FUNDS_LOCKED},
+    ContractError,
+};
 
 pub struct AuctionQuerier {
     bank: BankQuerier,
@@ -33,7 +37,7 @@ impl AuctionQuerier {
 
 impl Querier for AuctionQuerier {
     fn raw_query(&self, bin_request: &[u8]) -> cosmwasm_std::QuerierResult {
-        let request: QueryRequest<Empty> = from_json(&Binary::from(bin_request)).unwrap();
+        let request: QueryRequest<Empty> = from_json(Binary::from(bin_request)).unwrap();
         match request {
             QueryRequest::Stargate {
                 path,
@@ -85,13 +89,12 @@ impl Querier for AuctionQuerier {
 pub fn mock_deps_with_querier(
     _info: &MessageInfo,
 ) -> OwnedDeps<MockStorage, MockApi, AuctionQuerier, Empty> {
-    let deps = OwnedDeps {
+    OwnedDeps {
         storage: MockStorage::default(),
         api: MockApi::default(),
         querier: AuctionQuerier::new(),
         custom_query_type: PhantomData,
-    };
-    deps
+    }
 }
 
 pub fn init() -> (OwnedDeps<MemoryStorage, MockApi, AuctionQuerier>, Env) {
@@ -131,7 +134,7 @@ pub fn init() -> (OwnedDeps<MemoryStorage, MockApi, AuctionQuerier>, Env) {
 
     let msg = QueryMsg::WhitelistedAddresses {};
     let res: WhitelistedAddressesResponse =
-        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+        from_json(query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
     assert_eq!(res.addresses, vec!["bot".to_string()]);
 
     (deps, env)
@@ -177,7 +180,7 @@ fn update_config() {
 
     // query the config to check if it was updated
     let msg = QueryMsg::Config {};
-    let res: ConfigResponse = from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    let res: ConfigResponse = from_json(query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
     let config = res.config;
     assert_eq!(config.rewards_fee, Decimal::percent(20));
     assert_eq!(config.rewards_fee_addr, "new_rewards_addr".to_string());
@@ -208,7 +211,7 @@ fn update_ownership() {
 
     // ownership should not be updated until accepted
     let msg = QueryMsg::Ownership {};
-    let res: Ownership<Addr> = from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    let res: Ownership<Addr> = from_json(query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
     assert_eq!(res.owner.unwrap(), "owner");
 
     // accept ownership as new_owner should work
@@ -218,7 +221,7 @@ fn update_ownership() {
 
     // query the ownership to check if it was updated
     let msg = QueryMsg::Ownership {};
-    let res: Ownership<Addr> = from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+    let res: Ownership<Addr> = from_json(query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
     assert_eq!(res.owner.unwrap(), "new_owner");
 }
 
@@ -267,7 +270,7 @@ fn add_whitelist_address() {
     // query the whitelisted addresses to check if it was updated
     let msg = QueryMsg::WhitelistedAddresses {};
     let res: WhitelistedAddressesResponse =
-        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+        from_json(query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
     assert_eq!(
         res.addresses,
         vec!["another_whitelisted".to_string(), "bot".to_string(), "new_whitelisted".to_string()]
@@ -324,7 +327,7 @@ fn remove_whitelisted_address() {
     // query the whitelisted addresses to check if it was updated
     let msg = QueryMsg::WhitelistedAddresses {};
     let res: WhitelistedAddressesResponse =
-        from_json(&query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
+        from_json(query(deps.as_ref(), env.clone(), msg).unwrap()).unwrap();
     assert_eq!(res.addresses, vec![Addr::unchecked("new_whitelisted").to_string()]);
 }
 
@@ -412,7 +415,7 @@ fn join_pool_fails() {
     assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NoFunds {}));
 
     // join pool sending 2 different denoms should fail
-    let info = mock_info("robinho", &vec![coin(100, "native_denom"), coin(100, "wrong_denom")]);
+    let info = mock_info("robinho", &[coin(100, "native_denom"), coin(100, "wrong_denom")]);
     let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::MultipleDenoms {}));
 
@@ -585,7 +588,8 @@ fn try_bid_works() {
 
     assert!(FUNDS_LOCKED.load(&deps.storage).unwrap());
 
-    // try bid on a basket value that is lower than the highest bid should not fail but not bid either
+    // try bid on a basket value that is lower than the highest bid should not fail but not bid
+    // either
     let info = mock_info("bot", &[]);
     let msg = ExecuteMsg::TryBid {
         auction_round: 1,
@@ -665,7 +669,8 @@ fn try_bid_fails() {
     assert_eq!(res, ContractError::PaymentError(cw_utils::PaymentError::NonPayable {}));
 }
 
-// TODO: to test settle auction, need to comment the line that checks if the auction round is valid on executions.rs
+// TODO: to test settle auction, need to comment the line that checks if the auction round is valid
+// on executions.rs
 //
 // use crate::state::{TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION};
 // #[test]
@@ -793,8 +798,8 @@ fn try_bid_fails() {
 
 //     assert_eq!(
 //         res.messages[3].msg,
-//         TokenFactoryType::Injective.create_denom(Addr::unchecked(MOCK_CONTRACT_ADDR), "auction.2")
-//     );
+//         TokenFactoryType::Injective.create_denom(Addr::unchecked(MOCK_CONTRACT_ADDR),
+// "auction.2")     );
 
 //     assert_eq!(
 //         res.attributes,

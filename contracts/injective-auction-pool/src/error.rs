@@ -19,7 +19,10 @@ pub enum ContractError {
         rate: Decimal,
     },
 
-    #[error("Invalid auction round. Current auction round: {current_auction_round}, auction round: {auction_round}")]
+    #[error(
+        "Invalid auction round. Current auction round: {current_auction_round}, auction round: \
+         {auction_round}"
+    )]
     InvalidAuctionRound {
         current_auction_round: u64,
         auction_round: u64,
@@ -57,7 +60,10 @@ pub enum ContractError {
     #[error("Missing auction winning bid")]
     MissingAuctionWinningBid,
 
-    #[error("Insufficient funds. Must deposit at least {min_balance} {native_denom} to instantiate the contract")]
+    #[error(
+        "Insufficient funds. Must deposit at least {min_balance} {native_denom} to instantiate \
+         the contract"
+    )]
     InsufficientFunds {
         native_denom: String,
         min_balance: Uint128,

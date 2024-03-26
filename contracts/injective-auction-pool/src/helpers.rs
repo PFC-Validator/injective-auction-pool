@@ -1,15 +1,16 @@
 use std::str::FromStr;
 
-use crate::{
-    state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION},
-    ContractError,
-};
 use cosmwasm_std::{
     attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CodeInfoResponse,
     Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, OverflowError, QueryRequest,
     Uint128, WasmMsg,
 };
 use injective_auction::auction::QueryCurrentAuctionBasketResponse;
+
+use crate::{
+    state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION},
+    ContractError,
+};
 
 /// Starts a new auction
 pub(crate) fn new_auction_round(
@@ -48,8 +49,9 @@ pub(crate) fn new_auction_round(
             let auction_winning_bid =
                 auction_winning_bid.ok_or(ContractError::MissingAuctionWinningBid {})?;
             // the contract won the auction
-            // NOTE: this is assuming the bot is sending the correct data about the winner of the previous auction
-            // currently there's no way to query the auction module directly to get this information
+            // NOTE: this is assuming the bot is sending the correct data about the winner of the
+            // previous auction currently there's no way to query the auction module
+            // directly to get this information
             if deps.api.addr_validate(&auction_winner)? == env.contract.address {
                 // update LP subdenom for the next auction round (increment by 1)
                 let new_subdenom = unsettled_auction.lp_subdenom.checked_add(1).ok_or(
@@ -89,7 +91,8 @@ pub(crate) fn new_auction_round(
                     });
                 }
 
-                // reset the bidding balance to 0 if we won, otherwise keep the balance for the next round
+                // reset the bidding balance to 0 if we won, otherwise keep the balance for the next
+                // round
                 BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
                 let mut messages: Vec<CosmosMsg> = vec![];
@@ -124,8 +127,7 @@ pub(crate) fn new_auction_round(
 
                 let denom = format!(
                     "factory/{}/auction.{}",
-                    env.contract.address.to_string(),
-                    unsettled_auction.lp_subdenom
+                    env.contract.address, unsettled_auction.lp_subdenom
                 );
 
                 messages.push(CosmosMsg::Wasm(WasmMsg::Instantiate2 {
@@ -192,11 +194,12 @@ pub(crate) fn new_auction_round(
                 attributes.push(attr("treasure_chest_address", treasure_chest_address.to_string()));
                 attributes.push(attr("new_subdenom", format!("auction.{}", new_subdenom)));
 
-                return Ok((messages, attributes));
+                Ok((messages, attributes))
             }
             // the contract did NOT win the auction
             else {
-                // save the current auction details to the contract state, keeping the previous LP subdenom
+                // save the current auction details to the contract state, keeping the previous LP
+                // subdenom
                 UNSETTLED_AUCTION.save(
                     deps.storage,
                     &Auction {
@@ -219,7 +222,7 @@ pub(crate) fn new_auction_round(
                     unsettled_auction.auction_round.to_string(),
                 ));
                 attributes.push(attr("new_auction_round", current_auction_round.to_string()));
-                return Ok((messages, attributes));
+                Ok((messages, attributes))
             }
         },
         // should only happen on instantiation, initialize LP subdenom & bidding balance to 0
@@ -243,7 +246,7 @@ pub(crate) fn new_auction_round(
 
             attributes.push(attr("new_auction_round", current_auction_round.to_string()));
             attributes.push(attr("lp_subdenom", "auction.0"));
-            return Ok((messages, attributes));
+            Ok((messages, attributes))
         },
     }
 }

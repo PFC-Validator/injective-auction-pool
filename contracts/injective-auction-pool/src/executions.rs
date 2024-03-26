@@ -1,14 +1,17 @@
-use crate::helpers::{new_auction_round, query_current_auction, validate_percentage};
-use crate::state::{
-    Whitelisted, BIDDING_BALANCE, CONFIG, FUNDS_LOCKED, UNSETTLED_AUCTION, WHITELISTED_ADDRESSES,
-};
-use crate::ContractError;
 use cosmwasm_std::{
     attr, coins, to_json_binary, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response,
     Uint128, WasmMsg,
 };
-use injective_auction::auction::MsgBid;
-use injective_auction::auction_pool::ExecuteMsg::TryBid;
+use injective_auction::{auction::MsgBid, auction_pool::ExecuteMsg::TryBid};
+
+use crate::{
+    helpers::{new_auction_round, query_current_auction, validate_percentage},
+    state::{
+        Whitelisted, BIDDING_BALANCE, CONFIG, FUNDS_LOCKED, UNSETTLED_AUCTION,
+        WHITELISTED_ADDRESSES,
+    },
+    ContractError,
+};
 
 pub fn update_config(
     deps: DepsMut,

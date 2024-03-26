@@ -1,14 +1,17 @@
-use cosmwasm_std::{attr, entry_point, to_json_binary, Attribute};
-use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{
+    attr, entry_point, to_json_binary, Attribute, Binary, Deps, DepsMut, Env, MessageInfo,
+    Response, StdResult,
+};
 use cw2::set_contract_version;
-
 use injective_auction::auction_pool::{Config, ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use crate::error::ContractError;
-use crate::executions::{self, settle_auction};
-use crate::helpers::{new_auction_round, validate_percentage};
-use crate::queries;
-use crate::state::{Whitelisted, CONFIG, FUNDS_LOCKED, WHITELISTED_ADDRESSES};
+use crate::{
+    error::ContractError,
+    executions::{self, settle_auction},
+    helpers::{new_auction_round, validate_percentage},
+    queries,
+    state::{Whitelisted, CONFIG, FUNDS_LOCKED, WHITELISTED_ADDRESSES},
+};
 
 const CONTRACT_NAME: &str = "crates.io:injective-auction-pool";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
