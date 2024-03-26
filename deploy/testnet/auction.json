@@ -1,0 +1,14 @@
+{
+   "owner": "$FROM_ADDR",
+   "native_denom": "inj",
+   "min_balance": "$FEE_AMT",
+   "token_factory_type": "injective",
+   "rewards_fee": "0.05",
+   "rewards_fee_addr": "$FROM_ADDR",
+   "whitelisted_addresses": [
+      "$FROM_ADDR"
+   ],
+   "min_next_bid_increment_rate": "0.0005",
+   "treasury_chest_code_id": $TREASURE,
+   "min_return": "0.05"
+}
