@@ -262,7 +262,6 @@ pub(crate) fn validate_percentage(percentage: Decimal) -> Result<Decimal, Contra
 pub(crate) fn query_current_auction(
     deps: Deps,
 ) -> Result<QueryCurrentAuctionBasketResponse, ContractError> {
-    // TODO: fix deserialization
     let current_auction_basket_response: QueryCurrentAuctionBasketResponse =
         deps.querier.query(&QueryRequest::Stargate {
             path: "/injective.auction.v1beta1.Query/CurrentAuctionBasket".to_string(),
