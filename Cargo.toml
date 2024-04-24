@@ -21,8 +21,8 @@ keywords = ["blockchain", "cosmos", "cosmwasm"]
 cw-ownable = "0.5"
 cw-ownable-derive = "0.5.1"
 
-cosmwasm-schema = "1.5.3"
-cosmwasm-std = { version = "1.5.3", features = [
+cosmwasm-schema = "1.5.4"
+cosmwasm-std = { version = "1.5.4", features = [
   # Kuji is  @ 1.2
   "cosmwasm_1_2",
   "iterator",
@@ -37,8 +37,8 @@ thiserror = { version = "1.0.56" }
 treasurechest = { path = "packages/treasurechest" }
 injective_auction = { path = "packages/injective_auction" }
 cw-multi-test = { version = "0.20.0", features = ["cosmwasm_1_2"] }
-pfc-whitelist = "1.4.0"
-pfc-whitelist-derive = "1.4.0"
+pfc-whitelist = "1.5.0"
+pfc-whitelist-derive = "1.5.0"
 cw-item-set = "0.7.1"
 cw-utils = "1.0.3"
 osmosis-std-derive = "0.15.3"
