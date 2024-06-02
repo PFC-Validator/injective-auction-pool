@@ -110,9 +110,7 @@ pub(crate) fn join_pool(
     let config = CONFIG.load(deps.storage)?;
     let amount = cw_utils::must_pay(&info, &config.native_denom)?;
 
-    let current_auction_round = query_current_auction(deps.as_ref())?
-        .auction_round
-        .ok_or(ContractError::CurrentAuctionQueryError)?;
+    let current_auction_round = query_current_auction(deps.as_ref())?.auction_round;
 
     // prevents the user from joining the pool if the auction round is over
     if auction_round != current_auction_round {
@@ -182,7 +180,7 @@ pub(crate) fn exit_pool(
 
     // prevents the user from exiting the pool if the contract has already bid on the auction
     if FUNDS_LOCKED.load(deps.storage)?
-        && env.block.time.seconds() < current_auction_round_response.auction_closing_time()
+        && env.block.time.seconds() < current_auction_round_response.auction_closing_time as u64
     {
         return Err(ContractError::PooledAuctionLocked);
     }
@@ -230,9 +228,7 @@ pub(crate) fn try_bid(
     }
 
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
-    let current_auction_round = current_auction_round_response
-        .auction_round
-        .ok_or(ContractError::CurrentAuctionQueryError)?;
+    let current_auction_round = current_auction_round_response.auction_round;
 
     // prevents the contract from bidding on the wrong auction round
     if auction_round != current_auction_round {
@@ -243,7 +239,7 @@ pub(crate) fn try_bid(
     }
 
     // prevents the contract from bidding if the contract is already the highest bidder
-    if current_auction_round_response.highest_bidder == Some(env.contract.address.to_string()) {
+    if current_auction_round_response.highest_bidder == env.contract.address.to_string() {
         return Ok(Response::default()
             .add_attribute("action", "did_not_bid")
             .add_attribute("reason", "contract_is_already_the_highest_bidder"));
@@ -254,7 +250,6 @@ pub(crate) fn try_bid(
     // the latest + 1 is to make sure the auction module accepts the bid all the times
     let minimum_allowed_bid = current_auction_round_response
         .highest_bid_amount
-        .unwrap_or(0.to_string())
         .parse::<Decimal>()?
         .checked_mul((Decimal::one().checked_add(config.min_next_bid_increment_rate))?)?
         .to_uint_ceil()
@@ -319,9 +314,7 @@ pub fn settle_auction(
     }
 
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
-    let current_auction_round = current_auction_round_response
-        .auction_round
-        .ok_or(ContractError::CurrentAuctionQueryError)?;
+    let current_auction_round = current_auction_round_response.auction_round;
 
     // prevents the contract from settling the auction if the auction round has not finished
     if current_auction_round == unsettled_auction.auction_round {

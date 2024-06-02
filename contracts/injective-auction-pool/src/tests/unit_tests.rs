@@ -43,18 +43,18 @@ impl Querier for AuctionQuerier {
                 path,
                 data: _,
             } => match path.as_str() {
-                "/injective.auction.v1beta1.QueryCurrentAuctionBasketRequest" => {
+                "/injective.auction.v1beta1.Query/CurrentAuctionBasket" => {
                     Ok(CwContractResult::Ok(
                         to_json_binary(&QueryCurrentAuctionBasketResponse {
                             amount: vec![Coin {
                                 denom: "uatom".to_string(),
                                 amount: "10000".to_string(),
                             }],
-                            auction_round: Some(1),
+                            auction_round: 1,
                             // simulates now + 7 days in seconds
-                            auction_closing_time: Some(1_571_797_419 + 7 * 86_400),
-                            highest_bidder: Some("highest_bidder".to_string()),
-                            highest_bid_amount: Some("20000".to_string()),
+                            auction_closing_time: 1_571_797_419 + 7 * 86_400,
+                            highest_bidder: "highest_bidder".to_string(),
+                            highest_bid_amount: "20000".to_string(),
                         })
                         .unwrap(),
                     ))
@@ -570,7 +570,7 @@ fn try_bid_works() {
     assert_eq!(
         res.messages[0].msg,
         CosmosMsg::Stargate {
-            type_url: "/injective.auction.v1beta1.MsgBid".to_string(),
+            type_url: "/injective.auction.v1beta1.Msg/Bid".to_string(),
             value: {
                 let msg = MsgBid {
                     sender: env.contract.address.to_string(),

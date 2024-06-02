@@ -25,10 +25,7 @@ pub(crate) fn new_auction_round(
     // fetch current auction details and save them in the contract state
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
 
-    let current_auction_round = current_auction_round_response
-        .auction_round
-        .ok_or(ContractError::CurrentAuctionQueryError)?;
-
+    let current_auction_round = current_auction_round_response.auction_round;
     let current_basket = current_auction_round_response
         .amount
         .iter()
@@ -181,9 +178,9 @@ pub(crate) fn new_auction_round(
                     deps.storage,
                     &Auction {
                         basket,
-                        auction_round: current_auction_round_response.auction_round(),
+                        auction_round: current_auction_round_response.auction_round,
                         lp_subdenom: new_subdenom,
-                        closing_time: current_auction_round_response.auction_closing_time(),
+                        closing_time: current_auction_round_response.auction_closing_time as u64,
                     },
                 )?;
                 attributes.push(attr(
@@ -212,9 +209,9 @@ pub(crate) fn new_auction_round(
                                 denom: coin.denom.clone(),
                             })
                             .collect(),
-                        auction_round: current_auction_round_response.auction_round(),
+                        auction_round: current_auction_round_response.auction_round,
                         lp_subdenom: unsettled_auction.lp_subdenom,
-                        closing_time: current_auction_round_response.auction_closing_time(),
+                        closing_time: current_auction_round_response.auction_closing_time as u64,
                     },
                 )?;
                 attributes.push(attr(
@@ -231,9 +228,9 @@ pub(crate) fn new_auction_round(
                 deps.storage,
                 &Auction {
                     basket: current_basket,
-                    auction_round: current_auction_round_response.auction_round(),
+                    auction_round: current_auction_round_response.auction_round,
                     lp_subdenom: 0,
-                    closing_time: current_auction_round_response.auction_closing_time(),
+                    closing_time: current_auction_round_response.auction_closing_time as u64,
                 },
             )?;
 
@@ -265,10 +262,9 @@ pub(crate) fn validate_percentage(percentage: Decimal) -> Result<Decimal, Contra
 pub(crate) fn query_current_auction(
     deps: Deps,
 ) -> Result<QueryCurrentAuctionBasketResponse, ContractError> {
-    // TODO: fix deserialization
     let current_auction_basket_response: QueryCurrentAuctionBasketResponse =
         deps.querier.query(&QueryRequest::Stargate {
-            path: "/injective.auction.v1beta1.QueryCurrentAuctionBasketRequest".to_string(),
+            path: "/injective.auction.v1beta1.Query/CurrentAuctionBasket".to_string(),
             data: [].into(),
         })?;
 
