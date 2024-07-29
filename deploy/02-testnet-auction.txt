@@ -13,7 +13,7 @@ injectived config
 export FROM=auction-test
 export FROM_ADDR=inj12nn88vtuf893cpfkke23dszpr5uccqj2zqukt6
 export TREASURE=8127
-export AUCTION=11643
+export AUCTION=11654
 ## create the test denom
 export FEE_AMT=$(injectived query tokenfactory params|jq -r '.params.denom_creation_fee[0].amount')
 #export FEE_AMT=1000000000000000000

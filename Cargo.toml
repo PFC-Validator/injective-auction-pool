@@ -3,7 +3,7 @@ members = ["contracts/*", "integration", "packages/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 authors = [
   "Kerber0x <kerber0x@protonmail.com>",
   "Nahem <nahemseguias@gmail.com>",
@@ -36,6 +36,7 @@ serde = { version = "1.0.196", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.56" }
 treasurechest = { path = "packages/treasurechest" }
 injective_auction = { path = "packages/injective_auction" }
+injective-std = "1.13.2-testnet"
 cw-multi-test = { version = "0.20.0", features = ["cosmwasm_1_2"] }
 pfc-whitelist = "1.5.0"
 pfc-whitelist-derive = "1.5.0"

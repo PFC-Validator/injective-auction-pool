@@ -11,7 +11,6 @@ use treasurechest::{
     tf::tokenfactory::TokenFactoryType,
 };
 
-#[cfg(not(feature = "library"))]
 use crate::executions::withdraw;
 use crate::{
     executions::{change_token_factory, return_dust},
@@ -24,7 +23,7 @@ const CONTRACT_NAME: &str = "pfc-treasurechest";
 /// Contract version that is used for migration.
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[cfg_attr(not(feature = "library"), entry_point)]
+#[entry_point]
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
@@ -57,7 +56,7 @@ pub fn instantiate(
     Ok(Response::new().add_attribute("action", "instantiate"))
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
+#[entry_point]
 pub fn execute(
     deps: DepsMut,
     env: Env,
@@ -78,7 +77,8 @@ pub fn execute(
     }
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
+
+#[entry_point]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let result = match msg {
         QueryMsg::Config {} => to_json_binary(&query_config(deps)?),
@@ -92,7 +92,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     Ok(result)
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
+
+#[entry_point]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     let contract_version = get_contract_version(deps.storage)?;
 

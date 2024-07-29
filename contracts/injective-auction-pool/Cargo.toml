@@ -29,6 +29,7 @@ cw2 = { workspace = true }
 cw-storage-plus = { workspace = true }
 thiserror = { workspace = true }
 injective_auction = { workspace = true }
+injective-std = {workspace = true}
 prost = { workspace = true }
 cw-utils = { workspace = true }
 treasurechest = { workspace = true }
