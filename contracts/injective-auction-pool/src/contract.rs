@@ -19,7 +19,7 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[entry_point]
 pub fn instantiate(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
@@ -61,12 +61,13 @@ pub fn instantiate(
 
     FUNDS_LOCKED.save(deps.storage, &false)?;
 
-    let (messages, attributes) = new_auction_round(deps, &env, info, None, None)?;
+ //   let (messages, attributes) = new_auction_round(deps, &env, info, None, None)?;
 
     Ok(Response::default()
-        .add_messages(messages)
+   //     .add_messages(messages)
         .add_attribute("action", "instantiate")
-        .add_attributes(attributes))
+    )
+  //      .add_attributes(attributes))
 }
 
 #[entry_point]
@@ -131,5 +132,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         } => queries::query_treasure_chest_contracts(deps, start_after, limit),
         QueryMsg::BiddingBalance {} => queries::query_bidding_balance(deps),
         QueryMsg::FundsLocked {} => to_json_binary(&FUNDS_LOCKED.load(deps.storage)?),
+        QueryMsg::QueryCurrentAuctionBasket {  } =>  queries::query_current_auction_basket(deps)
     }
 }

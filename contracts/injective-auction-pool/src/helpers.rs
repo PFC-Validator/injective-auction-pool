@@ -1,10 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{
-    attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CodeInfoResponse,
-    Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, OverflowError,
-    Uint128, WasmMsg,
-};
+use cosmwasm_std::{attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CodeInfoResponse, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, OverflowError, Uint128, WasmMsg, StdResult};
 use injective_std::types::injective::auction::v1beta1::{AuctionQuerier, QueryCurrentAuctionBasketResponse};
 
 use crate::{
@@ -264,17 +260,9 @@ pub(crate) fn validate_percentage(percentage: Decimal) -> Result<Decimal, Contra
 /// Queries the current auction
 pub(crate) fn query_current_auction(
     deps: Deps,
-) -> Result<QueryCurrentAuctionBasketResponse, ContractError> {
-    // TODO: fix deserialization
+) -> StdResult<QueryCurrentAuctionBasketResponse> {
     let querier = AuctionQuerier::new(&deps.querier);
     let current_auction_basket_response: QueryCurrentAuctionBasketResponse = querier.current_auction_basket()?;
 
-    /*
-    let current_auction_basket_response: QueryCurrentAuctionBasketResponse =
-        deps.querier.query(&QueryRequest::Stargate {
-            path: "/injective.auction.v1beta1.Query/CurrentAuctionBasketRequest".to_string(),
-            data: [].into(),
-        })?;
-*/
     Ok(current_auction_basket_response)
 }

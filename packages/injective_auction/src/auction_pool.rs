@@ -3,6 +3,8 @@ use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
+#[allow(unused_imports)]
+use injective_std::types::injective::auction::v1beta1::{ QueryCurrentAuctionBasketResponse};
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: Option<String>,
@@ -83,6 +85,8 @@ pub enum QueryMsg {
     BiddingBalance {},
     #[returns(FundsLockedResponse)]
     FundsLocked {},
+    #[returns(FundsLockedResponse)]
+    QueryCurrentAuctionBasket {},
 }
 
 #[cw_serde]

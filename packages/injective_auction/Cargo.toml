@@ -22,6 +22,7 @@ prost-types = { workspace = true }
 osmosis-std-derive = { workspace = true }
 treasurechest = { workspace = true }
 cw-ownable = { workspace = true }
-injective-protobuf = "0.2.2"
+#injective-protobuf = "0.2.2"
+injective-std = {workspace = true}
 [dev-dependencies]
 protobuf = { workspace = true }

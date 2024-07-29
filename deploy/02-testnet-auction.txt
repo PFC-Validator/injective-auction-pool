@@ -30,3 +30,5 @@ injectived tx wasm instantiate $AUCTION ${INIT_MSG} \
     --from $FROM --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
 
 ^^ following is failing
+
+export AUCTION_CONTRACT=inj1wkqec8cpey2n7efdt47zmn9wyn9a6j974nv5n5
