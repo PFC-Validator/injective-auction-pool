@@ -23,7 +23,7 @@ pub(crate) fn new_auction_round(
     let config = CONFIG.load(deps.storage)?;
 
     // fetch current auction details and save them in the contract state
-    let current_auction_round_response = query_current_auction(deps.as_ref())?;
+    let current_auction_round_response: QueryCurrentAuctionBasketResponse = query_current_auction(deps.as_ref())?;
 
     let current_auction_round = current_auction_round_response
         .auction_round;
