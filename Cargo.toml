@@ -21,8 +21,8 @@ keywords = ["blockchain", "cosmos", "cosmwasm"]
 cw-ownable = "0.5"
 cw-ownable-derive = "0.5.1"
 
-cosmwasm-schema = "1.5.4"
-cosmwasm-std = { version = "1.5.4", features = [
+cosmwasm-schema = "1.5.5"
+cosmwasm-std = { version = "1.5.5", features = [
   # Kuji is  @ 1.2
   "cosmwasm_1_2",
   "iterator",

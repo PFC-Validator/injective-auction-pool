@@ -21,7 +21,7 @@ injectived tx wasm store ./artifacts/treasurechest_contract-aarch64.wasm --from 
 
 tx=AC309E601058B623CF4C8F73CEAAAF2C34F7BC0BAE068AF50ED48834F7432287
 
-export TREASURE=$(injectived query tx ${tx} |jq -e -r ' .logs[].events[] | select(.type=="cosmwasm.wasm.v1.EventCodeStored").attributes[] | select(.key=="code_id").value ' | tr -d '"')
+export TREASURE=$(injectived query tx ${tx} |jq -e -r ' .events[] | select(.type=="cosmwasm.wasm.v1.EventCodeStored").attributes[] | select(.key=="code_id").value ' | tr -d '"')
 echo $TREASURE
 export TREASURE=8127
 
@@ -29,9 +29,9 @@ injectived tx wasm store ./artifacts/injective_auction_pool-aarch64.wasm --from 
 
 tx=B2EDA45FC77F1B0521386341301FE4C9B8B3844960C2A5BF603E60118856303B
 
-export AUCTION=$(injectived query tx ${tx} |jq -e -r ' .logs[].events[] | select(.type=="cosmwasm.wasm.v1.EventCodeStored").attributes[] | select(.key=="code_id").value ' | tr -d '"')
+export AUCTION=$(injectived query tx ${tx} |jq -e -r ' .events[] | select(.type=="cosmwasm.wasm.v1.EventCodeStored").attributes[] | select(.key=="code_id").value ' | tr -d '"')
 echo $AUCTION
-export AUCTION=8128
+export AUCTION=11643
 
 ## create the test denom
 fee_amt=$(injectived query tokenfactory params|jq -r '.params.denom_creation_fee[0].amount')
@@ -79,7 +79,7 @@ tx_treasure_i=7B7889E11B4C87F255B07B2755E087CCD593A192381F2F3024C9646E98F72F08
 
 export TREASURE_CONTRACT=$(injectived query tx $tx_treasure_i|jq -r '.logs[].events[]| select(.type=="cosmwasm.wasm.v1.EventContractInstantiated").attributes[] |select(.key=="contract_address").value '|tr -d '"')
 echo $TREASURE_CONTRACT
-# inj13m59zu2w62293v4t7g9y2zwhjy6wxtunxl03hj
+# export TREASURE_CONTRACT=inj13m59zu2w62293v4t7g9y2zwhjy6wxtunxl03hj
 
 injectived query wasm cs smart $TREASURE_CONTRACT '{"config":{}}'|jq
 injectived query wasm cs smart $TREASURE_CONTRACT '{"state":{}}'|jq
