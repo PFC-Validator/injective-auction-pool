@@ -1,15 +1,18 @@
 use std::marker::PhantomData;
 
-use cosmwasm_std::{attr, coin, coins, from_json, testing::{mock_env, mock_info, BankQuerier, MockApi, MockStorage, MOCK_CONTRACT_ADDR}, to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse, ContractResult as CwContractResult, CosmosMsg, Decimal, Empty, Env, HexBinary, MemoryStorage, MessageInfo, OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, WasmMsg, WasmQuery, Int64, Uint64};
-use cw_ownable::Ownership;
-use injective_std::types::cosmos::base::v1beta1::Coin;
-use injective_std::types::injective::auction::v1beta1::{MsgBid};//, QueryCurrentAuctionBasketResponse};
-use injective_auction::{
-  //  auction::{Coin},
-    auction_pool::{
-        ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, WhitelistedAddressesResponse,
-    },
+use cosmwasm_std::{
+    attr, coin, coins, from_json,
+    testing::{mock_env, mock_info, BankQuerier, MockApi, MockStorage, MOCK_CONTRACT_ADDR},
+    to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse, ContractResult as CwContractResult,
+    CosmosMsg, Decimal, Empty, Env, HexBinary, Int64, MemoryStorage, MessageInfo, OwnedDeps,
+    Querier, QuerierResult, QueryRequest, Uint128, Uint64, WasmMsg, WasmQuery,
 };
+use cw_ownable::Ownership;
+use injective_auction::auction_pool::{
+    ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, WhitelistedAddressesResponse,
+};
+use injective_std::types::cosmos::base::v1beta1::Coin;
+use injective_std::types::injective::auction::v1beta1::MsgBid;
 use prost::Message;
 use treasurechest::tf::tokenfactory::TokenFactoryType;
 
@@ -566,7 +569,6 @@ fn try_bid_works() {
 
     assert_eq!(
         res.messages[0].msg,
-
         CosmosMsg::Stargate {
             type_url: "/injective.auction.v1beta1.MsgBid".to_string(),
             value: {

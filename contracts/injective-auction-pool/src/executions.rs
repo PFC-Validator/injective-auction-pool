@@ -2,9 +2,9 @@ use cosmwasm_std::{
     attr, coins, to_json_binary, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response,
     Uint128, WasmMsg,
 };
+use injective_auction::auction_pool::ExecuteMsg::TryBid;
 use injective_std::types::cosmos::base::v1beta1::Coin;
 use injective_std::types::injective::auction::v1beta1::MsgBid;
-use injective_auction::{ auction_pool::ExecuteMsg::TryBid};
 
 use crate::{
     helpers::{new_auction_round, query_current_auction, validate_percentage},
@@ -112,9 +112,7 @@ pub(crate) fn join_pool(
     let config = CONFIG.load(deps.storage)?;
     let amount = cw_utils::must_pay(&info, &config.native_denom)?;
 
-    let current_auction_round = query_current_auction(deps.as_ref())?
-        .auction_round;
-       // .ok_or(ContractError::CurrentAuctionQueryError)?;
+    let current_auction_round = query_current_auction(deps.as_ref())?.auction_round;
 
     // prevents the user from joining the pool if the auction round is over
     if auction_round != current_auction_round.u64() {
@@ -130,7 +128,7 @@ pub(crate) fn join_pool(
     let lp_subdenom = UNSETTLED_AUCTION.load(deps.storage)?.lp_subdenom;
     messages.push(config.token_factory_type.mint(
         env.contract.address.clone(),
-        format!("auction.{}", lp_subdenom).as_str(),
+        format!("factory/{}/auction.{}", env.contract.address.clone(), lp_subdenom).as_str(),
         amount,
     ));
 
@@ -184,7 +182,8 @@ pub(crate) fn exit_pool(
 
     // prevents the user from exiting the pool if the contract has already bid on the auction
     if FUNDS_LOCKED.load(deps.storage)?
-        && env.block.time.seconds() < current_auction_round_response.auction_closing_time.i64() as u64
+        && env.block.time.seconds()
+            < current_auction_round_response.auction_closing_time.i64() as u64
     {
         return Err(ContractError::PooledAuctionLocked);
     }
@@ -232,9 +231,8 @@ pub(crate) fn try_bid(
     }
 
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
-    let current_auction_round = current_auction_round_response
-        .auction_round;
-        //.ok_or(ContractError::CurrentAuctionQueryError)?;
+    let current_auction_round = current_auction_round_response.auction_round;
+    //.ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the contract from bidding on the wrong auction round
     if auction_round != current_auction_round.u64() {
@@ -255,8 +253,9 @@ pub(crate) fn try_bid(
     // minimum_allowed_bid = (highest_bid_amount * (1 + min_next_bid_increment_rate)) + 1
     // the latest + 1 is to make sure the auction module accepts the bid all the times
     let minimum_allowed_bid = current_auction_round_response
-        .highest_bid_amount.to_string()
-       // .unwrap_or(0.to_string())
+        .highest_bid_amount
+        .to_string()
+        // .unwrap_or(0.to_string())
         .parse::<Decimal>()?
         .checked_mul((Decimal::one().checked_add(config.min_next_bid_increment_rate))?)?
         .to_uint_ceil()
@@ -321,9 +320,8 @@ pub fn settle_auction(
     }
 
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
-    let current_auction_round = current_auction_round_response
-        .auction_round;
-//        .ok_or(ContractError::CurrentAuctionQueryError)?;
+    let current_auction_round = current_auction_round_response.auction_round;
+    //        .ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the contract from settling the auction if the auction round has not finished
     if current_auction_round.u64() == unsettled_auction.auction_round {
