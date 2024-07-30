@@ -346,7 +346,7 @@ pub fn join_pool_works() {
         res.messages[0].msg,
         TokenFactoryType::Injective.mint(
             env.contract.address.clone(),
-            "auction.0",
+            format!("factory/{}/auction.0", env.contract.address).as_str(),
             Uint128::from(100u128),
         )
     );

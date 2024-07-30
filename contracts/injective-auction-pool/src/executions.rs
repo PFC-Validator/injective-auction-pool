@@ -243,7 +243,7 @@ pub(crate) fn try_bid(
     }
 
     // prevents the contract from bidding if the contract is already the highest bidder
-    if current_auction_round_response.highest_bidder == env.contract.address.to_string() {
+    if current_auction_round_response.highest_bidder == env.contract.address {
         return Ok(Response::default()
             .add_attribute("action", "did_not_bid")
             .add_attribute("reason", "contract_is_already_the_highest_bidder"));
