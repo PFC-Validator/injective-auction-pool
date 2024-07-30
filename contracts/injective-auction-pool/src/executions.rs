@@ -117,9 +117,9 @@ pub(crate) fn join_pool(
        // .ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the user from joining the pool if the auction round is over
-    if auction_round != current_auction_round {
+    if auction_round != current_auction_round.u64() {
         return Err(ContractError::InvalidAuctionRound {
-            current_auction_round,
+            current_auction_round: current_auction_round.u64(),
             auction_round,
         });
     }
@@ -184,7 +184,7 @@ pub(crate) fn exit_pool(
 
     // prevents the user from exiting the pool if the contract has already bid on the auction
     if FUNDS_LOCKED.load(deps.storage)?
-        && env.block.time.seconds() < current_auction_round_response.auction_closing_time as u64
+        && env.block.time.seconds() < current_auction_round_response.auction_closing_time.i64() as u64
     {
         return Err(ContractError::PooledAuctionLocked);
     }
@@ -237,9 +237,9 @@ pub(crate) fn try_bid(
         //.ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the contract from bidding on the wrong auction round
-    if auction_round != current_auction_round {
+    if auction_round != current_auction_round.u64() {
         return Err(ContractError::InvalidAuctionRound {
-            current_auction_round,
+            current_auction_round: current_auction_round.u64(),
             auction_round,
         });
     }
@@ -255,7 +255,7 @@ pub(crate) fn try_bid(
     // minimum_allowed_bid = (highest_bid_amount * (1 + min_next_bid_increment_rate)) + 1
     // the latest + 1 is to make sure the auction module accepts the bid all the times
     let minimum_allowed_bid = current_auction_round_response
-        .highest_bid_amount
+        .highest_bid_amount.to_string()
        // .unwrap_or(0.to_string())
         .parse::<Decimal>()?
         .checked_mul((Decimal::one().checked_add(config.min_next_bid_increment_rate))?)?
@@ -326,7 +326,7 @@ pub fn settle_auction(
 //        .ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the contract from settling the auction if the auction round has not finished
-    if current_auction_round == unsettled_auction.auction_round {
+    if current_auction_round.u64() == unsettled_auction.auction_round {
         return Err(ContractError::AuctionRoundHasNotFinished);
     }
 

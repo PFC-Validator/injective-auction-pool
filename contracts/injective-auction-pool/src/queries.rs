@@ -49,7 +49,7 @@ pub fn query_bidding_balance(deps: Deps) -> StdResult<Binary> {
     })
 }
 pub fn query_current_auction_basket(deps: Deps) -> StdResult<Binary> {
-    let current_auction_round_response: QueryCurrentAuctionBasketResponse = query_current_auction(deps)?;
+    let current_auction_round_response = query_current_auction(deps)?;
 
     to_json_binary(&current_auction_round_response)
 }

@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Coin, Uint128};
+use cosmwasm_std::{Addr, Coin, Int64, Uint128, Uint64};
 use cw_storage_plus::{Item, Map};
 use injective_auction::auction_pool::Config;
 
@@ -30,3 +30,13 @@ pub const UNSETTLED_AUCTION: Item<Auction> = Item::new("usnsettled_auction");
 pub const TREASURE_CHEST_CONTRACTS: Map<u64, Addr> = Map::new("treasure_chest_contracts");
 /// Stores whether the funds can be withdrawn or not from the contract
 pub const FUNDS_LOCKED: Item<bool> = Item::new("funds_locked");
+
+#[cw_serde]
+#[serde(rename_all = "camelCase")]
+pub struct QueryCurrentAuctionBasketResponse {
+    pub amount: Vec<Coin>,
+    pub auction_round: Uint64,
+    pub auction_closing_time: Int64,
+    pub highest_bidder: String,
+    pub highest_bid_amount: Uint128,
+}

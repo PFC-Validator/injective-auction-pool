@@ -19,7 +19,7 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[entry_point]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
@@ -61,13 +61,13 @@ pub fn instantiate(
 
     FUNDS_LOCKED.save(deps.storage, &false)?;
 
- //   let (messages, attributes) = new_auction_round(deps, &env, info, None, None)?;
+    let (messages, attributes) = new_auction_round(deps, &env, info, None, None)?;
 
     Ok(Response::default()
-   //     .add_messages(messages)
+        .add_messages(messages)
         .add_attribute("action", "instantiate")
-    )
-  //      .add_attributes(attributes))
+
+        .add_attributes(attributes))
 }
 
 #[entry_point]

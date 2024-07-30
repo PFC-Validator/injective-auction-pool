@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CodeInfoResponse, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, OverflowError, Uint128, WasmMsg, StdResult};
+use cosmwasm_std::{attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CodeInfoResponse, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, OverflowError, Uint128, WasmMsg, StdResult, QueryRequest};
 use injective_std::types::injective::auction::v1beta1::{AuctionQuerier, QueryCurrentAuctionBasketResponse};
 
 use crate::{
@@ -19,7 +19,7 @@ pub(crate) fn new_auction_round(
     let config = CONFIG.load(deps.storage)?;
 
     // fetch current auction details and save them in the contract state
-    let current_auction_round_response: QueryCurrentAuctionBasketResponse = query_current_auction(deps.as_ref())?;
+    let current_auction_round_response = query_current_auction(deps.as_ref())?;
 
     let current_auction_round = current_auction_round_response
         .auction_round;
@@ -29,7 +29,7 @@ pub(crate) fn new_auction_round(
         .amount
         .iter()
         .map(|coin| Coin {
-            amount: Uint128::from_str(&coin.amount).expect("Failed to parse coin amount"),
+            amount: Uint128::from_str(&coin.amount.to_string()).expect("Failed to parse coin amount"),
             denom: coin.denom.clone(),
         })
         .collect();
@@ -167,7 +167,7 @@ pub(crate) fn new_auction_round(
                     .amount
                     .iter()
                     .map(|coin| Coin {
-                        amount: Uint128::from_str(&coin.amount)
+                        amount: Uint128::from_str(&coin.amount.to_string())
                             .expect("Failed to parse coin amount"),
                         denom: coin.denom.clone(),
                     })
@@ -177,9 +177,9 @@ pub(crate) fn new_auction_round(
                     deps.storage,
                     &Auction {
                         basket,
-                        auction_round: current_auction_round_response.auction_round,
+                        auction_round: current_auction_round_response.auction_round.u64(),
                         lp_subdenom: new_subdenom,
-                        closing_time: current_auction_round_response.auction_closing_time as u64,
+                        closing_time: current_auction_round_response.auction_closing_time.i64() as u64,
                     },
                 )?;
                 attributes.push(attr(
@@ -203,14 +203,14 @@ pub(crate) fn new_auction_round(
                             .amount
                             .iter()
                             .map(|coin| Coin {
-                                amount: Uint128::from_str(&coin.amount)
+                                amount: Uint128::from_str(&coin.amount.to_string())
                                     .expect("Failed to parse coin amount"),
                                 denom: coin.denom.clone(),
                             })
                             .collect(),
-                        auction_round: current_auction_round_response.auction_round,
+                        auction_round: current_auction_round_response.auction_round.u64(),
                         lp_subdenom: unsettled_auction.lp_subdenom,
-                        closing_time: current_auction_round_response.auction_closing_time as u64,
+                        closing_time: current_auction_round_response.auction_closing_time .i64() as u64,
                     },
                 )?;
                 attributes.push(attr(
@@ -227,9 +227,9 @@ pub(crate) fn new_auction_round(
                 deps.storage,
                 &Auction {
                     basket: current_basket,
-                    auction_round: current_auction_round_response.auction_round,
+                    auction_round: current_auction_round_response.auction_round.u64(),
                     lp_subdenom: 0,
-                    closing_time: current_auction_round_response.auction_closing_time as u64,
+                    closing_time: current_auction_round_response.auction_closing_time.i64() as u64,
                 },
             )?;
 
@@ -260,9 +260,19 @@ pub(crate) fn validate_percentage(percentage: Decimal) -> Result<Decimal, Contra
 /// Queries the current auction
 pub(crate) fn query_current_auction(
     deps: Deps,
-) -> StdResult<QueryCurrentAuctionBasketResponse> {
+) -> StdResult<crate::state::QueryCurrentAuctionBasketResponse> {
+    /*
     let querier = AuctionQuerier::new(&deps.querier);
-    let current_auction_basket_response: QueryCurrentAuctionBasketResponse = querier.current_auction_basket()?;
-
+    let current_auction_basket_response = querier.current_auction_basket()?;
     Ok(current_auction_basket_response)
+
+     */
+    let current_auction_basket_response: crate::state:: QueryCurrentAuctionBasketResponse =
+        deps.querier.query(&QueryRequest::Stargate {
+            path: "/injective.auction.v1beta1.Query/CurrentAuctionBasket".to_string(),
+            data: [].into(),
+        })?;
+
+   Ok(current_auction_basket_response)
 }
+

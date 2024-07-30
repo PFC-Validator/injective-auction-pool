@@ -36,6 +36,7 @@ serde = { version = "1.0.196", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.56" }
 treasurechest = { path = "packages/treasurechest" }
 injective_auction = { path = "packages/injective_auction" }
+#injective-std = {rev="42ab0c6cfdfda1ca4e69898feb1ad9ea9bd4af5e", git="https://github.com/InjectiveLabs/cw-injective"}
 injective-std = "1.13.2-testnet"
 cw-multi-test = { version = "0.20.0", features = ["cosmwasm_1_2"] }
 pfc-whitelist = "1.5.0"
