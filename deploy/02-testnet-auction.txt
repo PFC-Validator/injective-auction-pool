@@ -14,13 +14,15 @@ export FROM=auction-test
 export FROM_ADDR=inj12nn88vtuf893cpfkke23dszpr5uccqj2zqukt6
 export TREASURE=8127
 
+just optimize
+
 injectived tx wasm store ./artifacts/injective_auction_pool.wasm --from ${FROM} --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
 
-tx=BF46482DC0C034F186BC554E64A46B01A19F7D5E02DE16389E5AD76F355FA35C
+tx=874076D8833A70031C4A1E15C201169273E68AD308DF79508E856562DAB28EFC
 
 export AUCTION=$(injectived query tx ${tx} |jq -e -r ' .events[] | select(.type=="cosmwasm.wasm.v1.EventCodeStored").attributes[] | select(.key=="code_id").value ' | tr -d '"')
 echo $AUCTION
-export AUCTION=11699
+export AUCTION=11759
 
 ## create the test denom
 export FEE_AMT=$(injectived query tokenfactory params|jq -r '.params.denom_creation_fee[0].amount')
@@ -37,16 +39,68 @@ injectived tx wasm instantiate $AUCTION ${INIT_MSG} \
     --amount ${FEE_AMT}inj \
     --from $FROM --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
 
-^^ following is failing
-#tx_auction=A175DE3FF1F399E79B5BD616046C54BAE9CA5AAACE67A9E453C71189014FE145
-tx_auction=8E651410ACF16145CCB10F99F6C4B9989E3068665DA5C07564A4616E34D84F50
+tx_auction=6849A8FD2CCD67E4E24E62D5C27BB2CAF09D75DDB4A3932CE5A32CD200E215FB
 
 export AUCTION_CONTRACT=$(injectived query tx $tx_auction|jq -r '.events[]| select(.type=="cosmwasm.wasm.v1.EventContractInstantiated").attributes[] |select(.key=="contract_address").value '|tr -d '"')
 echo $AUCTION_CONTRACT
-#export AUCTION_CONTRACT=inj1r467s95lrzf005pw4x6grzhhtnmw9lx93lcpek
+# export AUCTION_CONTRACT=inj1r467s95lrzf005pw4x6grzhhtnmw9lx93lcpek
 # export AUCTION_CONTRACT=inj1s9dzsqrrq09z46ye7ffa9fldg3dt0e2cvx6yla
+# export AUCTION_CONTRACT=inj1dlyumvy7rfmq534hnh8et2ft58zpm0d84vjkfd
 
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"query_current_auction_basket":{}}'
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"whitelisted_addresses":{}}'
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"funds_locked":{}}'
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"bidding_balance":{}}'
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"current_auction_basket":{}}' | jq
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"whitelisted_addresses":{}}' | jq
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"funds_locked":{}}' | jq
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"bidding_balance":{}}' | jq
+
+# add address to whitelist
+injectived tx wasm execute $AUCTION_CONTRACT '{"update_white_listed_addresses":{"add":["inj12nn88vtuf893cpfkke23dszpr5uccqj2zqukt6"], "remove":[]}}' \
+  --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+
+# join pool with 1inj
+injectived tx wasm execute $AUCTION_CONTRACT '{"join_pool":{"auction_round":108}}' \
+  --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 \
+  --amount 1000000000000000000inj | jq
+
+# exit pool
+injectived tx wasm execute $AUCTION_CONTRACT '{"exit_pool":{}}' --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes \
+  --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto --amount 1000000000000000000factory/$AUCTION_CONTRACT/auction.0 \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+
+# try bid
+injectived tx wasm execute $AUCTION_CONTRACT '{"try_bid":{"auction_round":108, "basket_value":"1000"}}' \
+  --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+
+# try bid from non-whitelisted address
+injectived tx wasm execute $AUCTION_CONTRACT '{"try_bid":{"auction_round":108, "basket_value":"1000"}}' \
+  --from inj1g8tyg7z72umff6j6p6uwzf95heqf6qg6krkrpt --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+
+# try bid for an invalid auction round
+injectived tx wasm execute $AUCTION_CONTRACT '{"try_bid":{"auction_round":109, "basket_value":"1000"}}' \
+  --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+
+# join pool with 8_000inj
+injectived tx wasm execute $AUCTION_CONTRACT '{"join_pool":{"auction_round":108}}' \
+  --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 \
+  --amount 8000000000000000000000inj | jq
+
+# try bid with enough balance in the pool but not enough in the basket
+injectived tx wasm execute $AUCTION_CONTRACT '{"try_bid":{"auction_round":108, "basket_value":"1000"}}' \
+  --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+
+# try bid with enough balance in the pool and good value in the basket
+injectived tx wasm execute $AUCTION_CONTRACT '{"try_bid":{"auction_round":108, "basket_value":"10000000000000000000000"}}' \
+  --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto \
+  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+
+# exit pool
+injectived tx wasm execute $AUCTION_CONTRACT '{"exit_pool":{}}' --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto --amount 8000000000000000000000factory/$AUCTION_CONTRACT/auction.0 --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+
+# exit pool
+injectived tx wasm execute inj1kar690fes35rm0dx5zcjwt5pjhtvcf572w3ffe '{"exit_pool":{}}' --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto --amount 102factory/$AUCTION_CONTRACT/auction.0 --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq

@@ -1,11 +1,12 @@
+use crate::helpers::query_current_auction;
+use crate::state::{
+    BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION, WHITELISTED_ADDRESSES,
+};
 use cosmwasm_std::{to_json_binary, Binary, Deps, StdResult};
-use injective_std::types::injective::auction::v1beta1::QueryCurrentAuctionBasketResponse;
 use injective_auction::auction_pool::{
     BiddingBalanceResponse, ConfigResponse, TreasureChestContractsResponse,
     WhitelistedAddressesResponse,
 };
-use crate::helpers::query_current_auction;
-use crate::state::{BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, WHITELISTED_ADDRESSES};
 
 pub fn query_config(deps: Deps) -> StdResult<Binary> {
     to_json_binary(&ConfigResponse {
@@ -48,8 +49,15 @@ pub fn query_bidding_balance(deps: Deps) -> StdResult<Binary> {
         bidding_balance,
     })
 }
+
 pub fn query_current_auction_basket(deps: Deps) -> StdResult<Binary> {
     let current_auction_round_response = query_current_auction(deps)?;
 
     to_json_binary(&current_auction_round_response)
+}
+
+pub fn query_unsettled_auction(deps: Deps) -> StdResult<Binary> {
+    let unsettled_auction = UNSETTLED_AUCTION.load(deps.storage)?;
+
+    to_json_binary(&unsettled_auction)
 }

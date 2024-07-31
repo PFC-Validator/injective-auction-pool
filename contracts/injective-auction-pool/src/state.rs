@@ -25,7 +25,7 @@ pub const WHITELISTED_ADDRESSES: Map<&Addr, Whitelisted> = Map::new("whitelisted
 /// Stores the available balance that can be used for bidding
 pub const BIDDING_BALANCE: Item<Uint128> = Item::new("bidding_balance");
 /// Stores the current auction details
-pub const UNSETTLED_AUCTION: Item<Auction> = Item::new("usnsettled_auction");
+pub const UNSETTLED_AUCTION: Item<Auction> = Item::new("unsettled_auction");
 /// Maps the auction round to the treasure chest contract address
 pub const TREASURE_CHEST_CONTRACTS: Map<u64, Addr> = Map::new("treasure_chest_contracts");
 /// Stores whether the funds can be withdrawn or not from the contract
@@ -33,7 +33,7 @@ pub const FUNDS_LOCKED: Item<bool> = Item::new("funds_locked");
 
 #[cw_serde]
 #[serde(rename_all = "camelCase")]
-pub struct QueryCurrentAuctionBasketResponse {
+pub struct CurrentAuctionBasketResponse {
     pub amount: Vec<Coin>,
     pub auction_round: Uint64,
     pub auction_closing_time: Int64,

@@ -1,10 +1,8 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
-use treasurechest::tf::tokenfactory::TokenFactoryType;
+use treasurechest::tf::{injective::denom::Coin, tokenfactory::TokenFactoryType};
 
-#[allow(unused_imports)]
-use injective_std::types::injective::auction::v1beta1::{ QueryCurrentAuctionBasketResponse};
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: Option<String>,
@@ -51,8 +49,6 @@ pub enum ExecuteMsg {
     JoinPool {
         /// The auction round to join
         auction_round: u64,
-        /// The value in native denom of all assets being auctioned
-        basket_value: Uint128,
     },
     /// Can be called by the user before T-1 day from auction's end to exit the auction.
     ExitPool {},
@@ -86,7 +82,9 @@ pub enum QueryMsg {
     #[returns(FundsLockedResponse)]
     FundsLocked {},
     #[returns(FundsLockedResponse)]
-    QueryCurrentAuctionBasket {},
+    CurrentAuctionBasket {},
+    #[returns(UnsettledAuction)]
+    UnsettledAuction {},
 }
 
 #[cw_serde]
@@ -134,4 +132,17 @@ pub struct Config {
     /// The minimum return allowed in percentage. 5% means the contract cannot bid for more than
     /// 95% of the basket value
     pub min_return: Decimal,
+}
+
+#[cw_serde]
+
+pub struct UnsettledAuction {
+    /// The coins in the basket being auctioned
+    pub basket: Vec<Coin>,
+    /// The auction round number
+    pub auction_round: u64,
+    /// A unique number that is used to create new token factory denoms
+    pub lp_subdenom: u64,
+    /// The time when the auction will close
+    pub closing_time: u64,
 }

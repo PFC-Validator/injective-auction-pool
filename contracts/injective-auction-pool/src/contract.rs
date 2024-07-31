@@ -66,7 +66,6 @@ pub fn instantiate(
     Ok(Response::default()
         .add_messages(messages)
         .add_attribute("action", "instantiate")
-
         .add_attributes(attributes))
 }
 
@@ -106,8 +105,7 @@ pub fn execute(
         } => executions::try_bid(deps, env, info, auction_round, basket_value),
         ExecuteMsg::JoinPool {
             auction_round,
-            basket_value,
-        } => executions::join_pool(deps, env, info, auction_round, basket_value),
+        } => executions::join_pool(deps, env, info, auction_round),
         ExecuteMsg::ExitPool {} => executions::exit_pool(deps, env, info),
         ExecuteMsg::SettleAuction {
             auction_round,
@@ -132,6 +130,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         } => queries::query_treasure_chest_contracts(deps, start_after, limit),
         QueryMsg::BiddingBalance {} => queries::query_bidding_balance(deps),
         QueryMsg::FundsLocked {} => to_json_binary(&FUNDS_LOCKED.load(deps.storage)?),
-        QueryMsg::QueryCurrentAuctionBasket {  } =>  queries::query_current_auction_basket(deps)
+        QueryMsg::CurrentAuctionBasket {} => queries::query_current_auction_basket(deps),
+        QueryMsg::UnsettledAuction {} => queries::query_unsettled_auction(deps),
     }
 }
