@@ -1,6 +1,5 @@
 use cosmwasm_std::{
-    attr, coins, BankMsg, CosmosMsg, Decimal, Decimal256, DepsMut, Env, MessageInfo, Response,
-    Uint128, Uint256,
+    attr, coins, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response, Uint128,
 };
 use injective_std::types::cosmos::base::v1beta1::Coin;
 use injective_std::types::injective::auction::v1beta1::MsgBid;
@@ -239,26 +238,21 @@ pub(crate) fn try_bid(
     // calculate the minimum allowed bid to not be rejected by the auction module
     // minimum_allowed_bid = (highest_bid_amount * (1 + min_next_bid_increment_rate)) + 1
     // the latest + 1 is to make sure the auction module accepts the bid all the times
-    let minimum_allowed_bid = current_auction_round_response
-        .highest_bid_amount
-        .to_string()
-        .parse::<Decimal256>()?
-        .checked_mul((Decimal256::one().checked_add(config.min_next_bid_increment_rate.into()))?)?
-        .to_uint_ceil()
-        .checked_add(Uint256::one())?;
+    // TODO: check safe math
+    let minimum_allowed_bid = current_auction_round_response.highest_bid_amount
+        * (Decimal::one() + config.min_next_bid_increment_rate)
+        + Uint128::from(1u128);
 
     // prevents the contract from bidding if the minimum allowed bid is higher than bidding balance
     let bidding_balance: Uint128 = BIDDING_BALANCE.load(deps.storage)?;
-    if minimum_allowed_bid > bidding_balance.into() {
+    if minimum_allowed_bid > bidding_balance {
         return Ok(Response::default()
             .add_attribute("action", "did_not_bid")
             .add_attribute("reason", "minimum_allowed_bid_is_higher_than_bidding_balance"));
     }
 
     // prevents the contract from bidding if the returns are not high enough
-    if Uint256::from(basket_value) * (Decimal256::one() - Decimal256::from(config.min_return))
-        < minimum_allowed_bid
-    {
+    if basket_value * (Decimal::one() - config.min_return) < minimum_allowed_bid {
         return Ok(Response::default()
             .add_attribute("action", "did_not_bid")
             .add_attribute("reason", "basket_value_is_not_worth_bidding_for"));

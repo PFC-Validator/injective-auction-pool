@@ -801,17 +801,20 @@ fn try_bid_fails() {
 
 #[test]
 fn testing_math() {
-    let minimum_allowed_bid = 7_212_340_000_000_000_000_000_u128
+    let test = Uint128::from(7212340000000000000000_u128);
+    println!("{:?}", test);
+
+    let minimum_allowed_bid = 7212340000000000000000_u128
         .to_string()
         .parse::<Decimal256>()
         .unwrap()
         .checked_mul(
-            Decimal256::one().checked_add(Decimal256::from_str("0.0005").unwrap()).unwrap(),
+            (Decimal256::one().checked_add(Decimal256::from_str("0.0005").unwrap())).unwrap(),
         )
         .unwrap()
         .to_uint_ceil()
         .checked_add(Uint256::one())
         .unwrap();
 
-    println!("{:?}", minimum_allowed_bid);
+    assert_eq!(minimum_allowed_bid, Uint256::from(7_215_946_170_000_000_000_001_u128));
 }

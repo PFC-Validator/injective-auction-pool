@@ -20,7 +20,7 @@ pub enum ContractError {
     },
 
     #[error(
-        "Invalid auction round. Current auction round: {current_auction_round}, auction round: \
+        "Invalid auction round. Current auction round: {current_auction_round}. Trying auction round: \
          {auction_round}"
     )]
     InvalidAuctionRound {
