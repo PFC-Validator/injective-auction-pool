@@ -49,8 +49,6 @@ pub enum ExecuteMsg {
     JoinPool {
         /// The auction round to join
         auction_round: u64,
-        /// The value in native denom of all assets being auctioned
-        basket_value: Uint128,
     },
     /// Can be called by the user before T-1 day from auction's end to exit the auction.
     ExitPool {},

@@ -105,8 +105,7 @@ pub fn execute(
         } => executions::try_bid(deps, env, info, auction_round, basket_value),
         ExecuteMsg::JoinPool {
             auction_round,
-            basket_value,
-        } => executions::join_pool(deps, env, info, auction_round, basket_value),
+        } => executions::join_pool(deps, env, info, auction_round),
         ExecuteMsg::ExitPool {} => executions::exit_pool(deps, env, info),
         ExecuteMsg::SettleAuction {
             auction_round,

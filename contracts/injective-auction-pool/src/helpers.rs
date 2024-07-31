@@ -264,8 +264,8 @@ pub(crate) fn validate_percentage(percentage: Decimal) -> Result<Decimal, Contra
 /// Queries the current auction
 pub(crate) fn query_current_auction(
     deps: Deps,
-) -> StdResult<crate::state::QueryCurrentAuctionBasketResponse> {
-    let current_auction_basket_response: crate::state::QueryCurrentAuctionBasketResponse =
+) -> StdResult<crate::state::CurrentAuctionBasketResponse> {
+    let current_auction_basket_response: crate::state::CurrentAuctionBasketResponse =
         deps.querier.query(&QueryRequest::Stargate {
             path: "/injective.auction.v1beta1.Query/CurrentAuctionBasket".to_string(),
             data: [].into(),

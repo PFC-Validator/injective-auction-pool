@@ -33,7 +33,7 @@ pub const FUNDS_LOCKED: Item<bool> = Item::new("funds_locked");
 
 #[cw_serde]
 #[serde(rename_all = "camelCase")]
-pub struct QueryCurrentAuctionBasketResponse {
+pub struct CurrentAuctionBasketResponse {
     pub amount: Vec<Coin>,
     pub auction_round: Uint64,
     pub auction_closing_time: Int64,

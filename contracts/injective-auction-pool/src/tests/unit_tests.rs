@@ -1,11 +1,11 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, str::FromStr};
 
 use cosmwasm_std::{
     attr, coin, coins, from_json,
     testing::{mock_env, mock_info, BankQuerier, MockApi, MockStorage, MOCK_CONTRACT_ADDR},
     to_json_binary, Addr, BankMsg, Binary, CodeInfoResponse, ContractResult as CwContractResult,
-    CosmosMsg, Decimal, Empty, Env, HexBinary, Int64, MemoryStorage, MessageInfo, OwnedDeps,
-    Querier, QuerierResult, QueryRequest, Uint128, Uint64, WasmMsg, WasmQuery,
+    CosmosMsg, Decimal, Decimal256, Empty, Env, HexBinary, Int64, MemoryStorage, MessageInfo,
+    OwnedDeps, Querier, QuerierResult, QueryRequest, Uint128, Uint256, Uint64, WasmQuery,
 };
 use cw_ownable::Ownership;
 use injective_auction::auction_pool::{
@@ -44,7 +44,7 @@ impl Querier for AuctionQuerier {
             } => match path.as_str() {
                 "/injective.auction.v1beta1.Query/CurrentAuctionBasket" => {
                     Ok(CwContractResult::Ok(
-                        to_json_binary(&crate::state::QueryCurrentAuctionBasketResponse {
+                        to_json_binary(&crate::state::CurrentAuctionBasketResponse {
                             amount: vec![cosmwasm_std::Coin {
                                 denom: "uatom".to_string(),
                                 amount: Uint128::new(10000u128),
@@ -337,7 +337,6 @@ pub fn join_pool_works() {
     let info = mock_info("robinho", &coins(100, "native_denom"));
     let msg = ExecuteMsg::JoinPool {
         auction_round: 1,
-        basket_value: Uint128::from(10_000u128),
     };
     let res = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
 
@@ -359,20 +358,6 @@ pub fn join_pool_works() {
             amount: coins(100, format!("factory/{}/{}", MOCK_CONTRACT_ADDR, "auction.0")),
         }
         .into()
-    );
-
-    // contract calls try_bid on itself
-    assert_eq!(
-        res.messages[2].msg,
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-            msg: to_json_binary(&ExecuteMsg::TryBid {
-                auction_round: 1,
-                basket_value: Uint128::from(10_000u128),
-            })
-            .unwrap(),
-            funds: vec![],
-        })
     );
 
     // checking attributes are fine
@@ -398,7 +383,6 @@ fn join_pool_fails() {
     let info = mock_info("robinho", &coins(100, "wrong_denom"));
     let msg = ExecuteMsg::JoinPool {
         auction_round: 1,
-        basket_value: Uint128::from(10_000u128),
     };
     let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
     assert_eq!(
@@ -422,7 +406,6 @@ fn join_pool_fails() {
     let info = mock_info("robinho", &coins(100, "native_denom"));
     let msg = ExecuteMsg::JoinPool {
         auction_round: 2,
-        basket_value: Uint128::from(10_000u128),
     };
     let res = execute(deps.as_mut().branch(), env.clone(), info, msg.clone()).unwrap_err();
     assert_eq!(
@@ -441,7 +424,6 @@ fn exit_pool_works() {
     let info = mock_info("robinho", &coins(100, "native_denom"));
     let msg = ExecuteMsg::JoinPool {
         auction_round: 1,
-        basket_value: Uint128::from(10_000u128),
     };
     let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
 
@@ -482,7 +464,6 @@ fn exit_pool_fails() {
     let info = mock_info("robinho", &coins(100, "native_denom"));
     let msg = ExecuteMsg::JoinPool {
         auction_round: 1,
-        basket_value: Uint128::from(10_000u128),
     };
     let _ = execute(deps.as_mut().branch(), env.clone(), info.clone(), msg).unwrap();
 
@@ -554,7 +535,6 @@ fn try_bid_works() {
     let info = mock_info("robinho", &coins(30_000, "native_denom"));
     let msg = ExecuteMsg::JoinPool {
         auction_round: 1,
-        basket_value: Uint128::from(10_000u128),
     };
     let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
 
@@ -631,7 +611,6 @@ fn try_bid_fails() {
     let info = mock_info("robinho", &coins(30_000, "native_denom"));
     let msg = ExecuteMsg::JoinPool {
         auction_round: 1,
-        basket_value: Uint128::from(10_000u128),
     };
     let _ = execute(deps.as_mut().branch(), env.clone(), info, msg).unwrap();
 
@@ -819,3 +798,20 @@ fn try_bid_fails() {
 //     // funds should be released
 //     assert!(!FUNDS_LOCKED.load(deps.as_ref().storage).unwrap());
 // }
+
+#[test]
+fn testing_math() {
+    let minimum_allowed_bid = 7_212_340_000_000_000_000_000_u128
+        .to_string()
+        .parse::<Decimal256>()
+        .unwrap()
+        .checked_mul(
+            Decimal256::one().checked_add(Decimal256::from_str("0.0005").unwrap()).unwrap(),
+        )
+        .unwrap()
+        .to_uint_ceil()
+        .checked_add(Uint256::one())
+        .unwrap();
+
+    println!("{:?}", minimum_allowed_bid);
+}

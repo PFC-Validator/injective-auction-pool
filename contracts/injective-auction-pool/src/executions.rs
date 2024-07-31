@@ -1,8 +1,7 @@
 use cosmwasm_std::{
-    attr, coins, to_json_binary, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response,
-    Uint128, WasmMsg,
+    attr, coins, BankMsg, CosmosMsg, Decimal, Decimal256, DepsMut, Env, MessageInfo, Response,
+    Uint128, Uint256,
 };
-use injective_auction::auction_pool::ExecuteMsg::TryBid;
 use injective_std::types::cosmos::base::v1beta1::Coin;
 use injective_std::types::injective::auction::v1beta1::MsgBid;
 
@@ -107,7 +106,6 @@ pub(crate) fn join_pool(
     env: Env,
     info: MessageInfo,
     auction_round: u64,
-    basket_value: Uint128,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let amount = cw_utils::must_pay(&info, &config.native_denom)?;
@@ -132,7 +130,7 @@ pub(crate) fn join_pool(
         amount,
     ));
 
-    // send the minted lp token to the user
+    // send the minted lp token to the user address
     let lp_denom = format!("factory/{}/auction.{}", env.contract.address, lp_subdenom);
     messages.push(
         BankMsg::Send {
@@ -145,16 +143,6 @@ pub(crate) fn join_pool(
     // increase the balance that can be used for bidding
     BIDDING_BALANCE
         .update::<_, ContractError>(deps.storage, |balance| Ok(balance.checked_add(amount)?))?;
-
-    // try to bid on the auction if possible
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: env.contract.address.to_string(),
-        msg: to_json_binary(&TryBid {
-            auction_round,
-            basket_value,
-        })?,
-        funds: vec![],
-    }));
 
     Ok(Response::default().add_messages(messages).add_attributes(vec![
         ("action", "join_pool".to_string()),
@@ -232,7 +220,6 @@ pub(crate) fn try_bid(
 
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
     let current_auction_round = current_auction_round_response.auction_round;
-    //.ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the contract from bidding on the wrong auction round
     if auction_round != current_auction_round.u64() {
@@ -255,22 +242,23 @@ pub(crate) fn try_bid(
     let minimum_allowed_bid = current_auction_round_response
         .highest_bid_amount
         .to_string()
-        // .unwrap_or(0.to_string())
-        .parse::<Decimal>()?
-        .checked_mul((Decimal::one().checked_add(config.min_next_bid_increment_rate))?)?
+        .parse::<Decimal256>()?
+        .checked_mul((Decimal256::one().checked_add(config.min_next_bid_increment_rate.into()))?)?
         .to_uint_ceil()
-        .checked_add(Uint128::one())?;
+        .checked_add(Uint256::one())?;
 
     // prevents the contract from bidding if the minimum allowed bid is higher than bidding balance
     let bidding_balance: Uint128 = BIDDING_BALANCE.load(deps.storage)?;
-    if minimum_allowed_bid > bidding_balance {
+    if minimum_allowed_bid > bidding_balance.into() {
         return Ok(Response::default()
             .add_attribute("action", "did_not_bid")
             .add_attribute("reason", "minimum_allowed_bid_is_higher_than_bidding_balance"));
     }
 
     // prevents the contract from bidding if the returns are not high enough
-    if basket_value * (Decimal::one() - config.min_return) < minimum_allowed_bid {
+    if Uint256::from(basket_value) * (Decimal256::one() - Decimal256::from(config.min_return))
+        < minimum_allowed_bid
+    {
         return Ok(Response::default()
             .add_attribute("action", "did_not_bid")
             .add_attribute("reason", "basket_value_is_not_worth_bidding_for"));
