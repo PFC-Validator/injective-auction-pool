@@ -43,14 +43,15 @@ tx_auction=6849A8FD2CCD67E4E24E62D5C27BB2CAF09D75DDB4A3932CE5A32CD200E215FB
 
 export AUCTION_CONTRACT=$(injectived query tx $tx_auction|jq -r '.events[]| select(.type=="cosmwasm.wasm.v1.EventContractInstantiated").attributes[] |select(.key=="contract_address").value '|tr -d '"')
 echo $AUCTION_CONTRACT
-#export AUCTION_CONTRACT=inj1r467s95lrzf005pw4x6grzhhtnmw9lx93lcpek
+# export AUCTION_CONTRACT=inj1r467s95lrzf005pw4x6grzhhtnmw9lx93lcpek
 # export AUCTION_CONTRACT=inj1s9dzsqrrq09z46ye7ffa9fldg3dt0e2cvx6yla
+# export AUCTION_CONTRACT=inj1dlyumvy7rfmq534hnh8et2ft58zpm0d84vjkfd
 
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"query_current_auction_basket":{}}'
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"whitelisted_addresses":{}}'
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"funds_locked":{}}'
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"bidding_balance":{}}'
-injectived query wasm  cs smart $AUCTION_CONTRACT '{"unsettled_auction":{}}'
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"current_auction_basket":{}}' | jq
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"whitelisted_addresses":{}}' | jq
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"funds_locked":{}}' | jq
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"bidding_balance":{}}' | jq
+injectived query wasm  cs smart $AUCTION_CONTRACT '{"config":{}}' | jq
 
 # add address to whitelist
 injectived tx wasm execute $AUCTION_CONTRACT '{"update_white_listed_addresses":{"add":["inj12nn88vtuf893cpfkke23dszpr5uccqj2zqukt6"], "remove":[]}}' \
@@ -105,6 +106,5 @@ injectived tx wasm execute $AUCTION_CONTRACT '{"exit_pool":{}}' --from inj1cdugm
 # exit pool
 injectived tx wasm execute inj1kar690fes35rm0dx5zcjwt5pjhtvcf572w3ffe '{"exit_pool":{}}' --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto --amount 102factory/$AUCTION_CONTRACT/auction.0 --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
 
-
 # settle auction
-injectived tx wasm execute inj1kar690fes35rm0dx5zcjwt5pjhtvcf572w3ffe '{"settle_auction":{"auction_round":108,"auction_winner":"inj1dlyumvy7rfmq534hnh8et2ft58zpm0d84vjkfd", "auction_winning_bid":"16000000000000"}}' --from $FROM  --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto  --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
+injectived tx wasm execute $AUCTION_CONTRACT '{"settle_auction":{"auction_round":108, "auction_winner":"inj1dlyumvy7rfmq534hnh8et2ft58zpm0d84vjkfd", "auction_winning_bid": "7230370850000000000001"}}' --from inj1cdugmt5t0mgfsmfc99eyhe4fzps0937ae0jgqh --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto --node https://testnet.sentry.tm.injective.network:443 --output json --chain-id injective-888 | jq
