@@ -303,7 +303,6 @@ pub fn settle_auction(
 
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
     let current_auction_round = current_auction_round_response.auction_round;
-    //        .ok_or(ContractError::CurrentAuctionQueryError)?;
 
     // prevents the contract from settling the auction if the auction round has not finished
     if current_auction_round.u64() == unsettled_auction.auction_round {
