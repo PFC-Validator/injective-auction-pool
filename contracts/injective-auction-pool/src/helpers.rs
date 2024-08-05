@@ -1,15 +1,26 @@
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CodeInfoResponse,
-    Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, OverflowError, QueryRequest,
-    StdResult, Uint128, WasmMsg,
+    attr, instantiate2_address, to_json_binary, Attribute, BankMsg, Binary, CanonicalAddr,
+    CodeInfoResponse, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, Instantiate2AddressError,
+    MessageInfo, OverflowError, QueryRequest, StdResult, Uint128, WasmMsg,
 };
 
 use crate::{
     state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION},
     ContractError,
 };
+
+// Function to create a truncated address
+pub fn my_address(
+    checksum: &[u8],
+    creator: &CanonicalAddr,
+    salt: &[u8],
+) -> Result<CanonicalAddr, Instantiate2AddressError> {
+    let full_address = instantiate2_address(checksum, creator, salt)?;
+    let truncated_address = &full_address.0[..20]; // Truncate to the first 20 bytes
+    Ok(CanonicalAddr(Binary(truncated_address.to_vec())))
+}
 
 /// Starts a new auction
 pub(crate) fn new_auction_round(
@@ -120,8 +131,7 @@ pub(crate) fn new_auction_round(
                 );
                 let salt = Binary::from(seed.as_bytes());
 
-                let treasure_chest_address =
-                    Addr::unchecked(instantiate2_address(&checksum, &creator, &salt)?.to_string());
+                let treasure_chest_address = my_address(&checksum, &creator, &salt)?.to_string();
 
                 let denom = format!(
                     "factory/{}/auction.{}",
@@ -149,14 +159,14 @@ pub(crate) fn new_auction_round(
                 TREASURE_CHEST_CONTRACTS.save(
                     deps.storage,
                     unsettled_auction.auction_round,
-                    &treasure_chest_address,
+                    &deps.api.addr_validate(&treasure_chest_address)?,
                 )?;
 
                 // transfer previous token factory's admin rights to the treasury chest contract
                 messages.push(config.token_factory_type.change_admin(
                     env.contract.address.clone(),
                     &denom,
-                    treasure_chest_address.clone(),
+                    deps.api.addr_validate(&treasure_chest_address)?,
                 ));
 
                 // create a new denom for the current auction round
