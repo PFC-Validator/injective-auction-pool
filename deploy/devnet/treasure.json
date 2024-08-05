@@ -1,0 +1,7 @@
+{
+  "denom": "$TOKEN_DENOM",
+  "owner": "$FROM_ADDR",
+  "notes": "some random stuff can be here",
+  "token_factory": "Injective",
+  "burn_it": true
+}

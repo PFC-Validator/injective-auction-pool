@@ -1,0 +1,29 @@
+# intended to be run from root directory
+# config on machine
+export NODE=https://devnet.tm.injective.dev:443/
+injectived config node $NODE
+injectived config chain-id injective-777
+injectived config
+# should show
+  {
+  	"chain-id": "injective-777",
+  	"keyring-backend": "os",
+  	"output": "json",
+  	"node": "https://devnet.tm.injective.dev:443/",
+  	"broadcast-mode": "sync"
+  }
+
+injectived status|jq .NodeInfo.network
+# should show injective-777
+
+echo 12345678 | injectived keys unsafe-import-eth-key  inj-user 5d386fbdbf11f1141010f81a46b40f94887367562bd33b452bbaa6ce1cd1381e
+# this maps to the PK above
+export INJ_USER=inj14au322k9munkmx5wrchz9q30juf5wjgz2cfqku
+
+export CONTRACT_OWNER_ADDR=inj12nn88vtuf893cpfkke23dszpr5uccqj2zqukt6
+export BOT_WORKER_ADDR=inj12c0vwwymyj4t64rwmzrs8u6dttfhdf88zjm6nf
+export BIDDER_ADDR=inj1u4f9tvhkltksfr5ezz5cfe8fcsl9k5t5ycjhat
+
+injectived tx bank multi-send $INJ_USER $CONTRACT_OWNER_ADDR $BOT_WORKER_ADDR $BIDDER_ADDR 1000000000000000000000inj --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+
+injectived query bank balances  $CONTRACT_OWNER_ADDR --node $NODE

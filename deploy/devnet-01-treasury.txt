@@ -1,0 +1,125 @@
+# intended to be run from root directory
+# config on machine
+injectived config
+# should show
+  {
+  	"chain-id": "injective-777",
+  	"keyring-backend": "os",
+  	"output": "json",
+  	"node": "https://devnet.tm.injective.dev:443/",
+  	"broadcast-mode": "sync"
+  }
+
+
+export NODE=https://devnet.tm.injective.dev:443/
+export FROM=auction-test
+export FROM_ADDR=inj12nn88vtuf893cpfkke23dszpr5uccqj2zqukt6
+export BIDDER_ADDR=inj1u4f9tvhkltksfr5ezz5cfe8fcsl9k5t5ycjhat
+export BIDDER=test-sign
+just optimize
+
+injectived tx wasm store ./artifacts/treasurechest_contract.wasm --from ${FROM} --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+
+tx=D0B9DE48C86F1F6B4F14B63F2005F24E2B881D4190D8CD781628794F3724CF61
+
+export TREASURE=$(injectived query tx ${tx} |jq -e -r ' .events[] | select(.type=="cosmwasm.wasm.v1.EventCodeStored").attributes[] | select(.key=="code_id").value ' | tr -d '"')
+echo $TREASURE
+export TREASURE=18
+
+
+## create the test denom
+export fee_amt=$(injectived query tokenfactory params|jq -r '.params.denom_creation_fee[0].amount')
+# export fee_amt=1000000000000000000
+
+injectived tx tokenfactory create-denom tr auction TRAUCT1 6  --from $FROM  --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto --node $NODE
+
+token_tx=56E398B479340CC24A52A2C4B5A360E2E1C75C8F5A606AEA0B3A284EB56DA943
+
+export TOKEN_DENOM=$(injectived query tx ${token_tx}|jq -r '.events[] | select(.type=="injective.tokenfactory.v1beta1.EventCreateTFDenom").attributes[] | select (.key=="denom").value' |tr -d '"')
+echo $TOKEN_DENOM
+# export TOKEN_DENOM=factory/inj12nn88vtuf893cpfkke23dszpr5uccqj2zqukt6/tr
+
+injectived tx tokenfactory mint 3000${TOKEN_DENOM} --from $FROM  --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+
+tx_mint=A888261AF480ABF94BBCCC5238E0D277AC7565BB6B1D14FF813A5024E85D4B25
+injectived query tx ${tx_mint} |jq -e '.code'
+# should be 0.
+
+## we need some rewards
+for reward in reward1 reward2 reward3 reward4
+do
+injectived tx tokenfactory create-denom $reward auction R$REWARD 6 --from $FROM  --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+sleep 5
+injectived tx tokenfactory mint 2000factory/$FROM_ADDR/$reward --from $FROM  --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+sleep 5
+done
+
+# see them
+injectived query bank balances $FROM_ADDR --node $NODE
+
+# envsubst comes from
+# brew install getttext
+INIT_MSG=$(envsubst < ./deploy/devnet/treasure.json)
+date_label=$(date +"%Y-%m-%d %H:%M")
+export distribute_amounts="1000factory/$FROM_ADDR/reward1,1500factory/$FROM_ADDR/reward2,300factory/$FROM_ADDR/reward3,600factory/$FROM_ADDR/reward4"
+
+injectived tx wasm instantiate $TREASURE ${INIT_MSG} \
+    --label treasure_${date_label} \
+    --admin $FROM_ADDR \
+    --amount $distribute_amounts \
+    --from $FROM --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+
+tx_treasure_i=7E97821D47EF82B29BEA693320D201EC2A4ADD719A2B205920ADD6CFDDA83F76
+
+export TREASURE_CONTRACT=$(injectived query tx $tx_treasure_i|jq -r '.events[]| select(.type=="cosmwasm.wasm.v1.EventContractInstantiated").attributes[] |select(.key=="contract_address").value '|tr -d '"')
+echo $TREASURE_CONTRACT
+# export TREASURE_CONTRACT=inj1lqgdq9u8zhcvwwwz3xjswactrtq6qzpt0q78tk
+
+injectived query wasm cs smart $TREASURE_CONTRACT '{"config":{}}'|jq
+injectived query wasm cs smart $TREASURE_CONTRACT '{"state":{}}'|jq
+injectived query bank balances $TREASURE_CONTRACT --node $NODE --output text
+injectived query bank balances $FROM --node $NODE --output text
+
+injectived tx bank send $FROM_ADDR  $BIDDER_ADDR 1000${TOKEN_DENOM} --yes --gas-prices "160000000inj" --gas-adjustment 1.5 --gas auto
+injectived query bank balances $BIDDER_ADDR --node $NODE --output text
+
+
+# this burning a token can be done by anyone apparently
+# the 2nd way (currently not configured is that it just holds the token)
+injectived query tokenfactory denom-authority-metadata $TOKEN_DENOM
+
+# try 10
+injectived tx wasm exec $TREASURE_CONTRACT '{"withdraw":{}}' --amount 10${TOKEN_DENOM} --from $BIDDER --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+
+tx_withdraw=4FCE8C6796B3BAF2BD5BEB90A3022B20D981AE9E60B0D1AC0B65DB2139DB0BFD
+injectived query tx $tx_withdraw|jq -r '.events' >/tmp/events.json
+
+jq -r < /tmp/events.json -e '(nth(1;.[] |select(.type=="transfer"))).attributes[]|select(.key=="amount").value'|tr ',' '\n'
+injectived query bank balances $TREASURE_CONTRACT --node $NODE --output text
+injectived query bank balances $BIDDER_ADDR --node $NODE --output text
+
+injectived query bank total-supply-of $TOKEN_DENOM  --node $NODE --output text
+
+# try another 10. ensure you get the same amount (
+injectived tx wasm exec $TREASURE_CONTRACT '{"withdraw":{}}' --amount 10${TOKEN_DENOM} --from $BIDDER --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+
+tx_withdraw=4FCE8C6796B3BAF2BD5BEB90A3022B20D981AE9E60B0D1AC0B65DB2139DB0BFD
+injectived query tx $tx_withdraw|jq -r '.events' >/tmp/events.json
+
+jq -r < /tmp/events.json -e '(nth(1;.[] |select(.type=="transfer"))).attributes[]|select(.key=="amount").value'|tr ',' '\n'
+injectived query bank balances $TREASURE_CONTRACT --node $NODE --output text
+injectived query bank balances $BIDDER_ADDR --node $NODE --output text
+
+injectived query bank total-supply-of $TOKEN_DENOM  --node $NODE --output text
+
+injectived tx wasm exec $TREASURE_CONTRACT '{"withdraw":{}}' --amount 2980${TOKEN_DENOM} --from $FROM --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+tx_withdraw2=1B609453D36147BFC9E7622230D772C72BACD988FB08AFFB94BE46C0B229398D
+
+injectived query tx $tx_withdraw2|jq -r '.logs[].events' >/tmp/events2.json
+jq -r < /tmp/events2.json -e '(nth(1;.[] |select(.type=="transfer"))).attributes[]|select(.key=="amount").value'|tr ',' '\n'
+
+injectived tx wasm exec $TREASURE_CONTRACT '{"withdraw":{}}' --amount 10${TOKEN_DENOM} --from $FROM --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto
+tx_withdraw3=372AC06BBD14DC59A9C64AA03CD9302AC9369A96ECB255051BE4BBC12C114E7F
+
+injectived query tx $tx_withdraw3|jq -r '.logs[].events' >/tmp/events3.json
+jq -r < /tmp/events3.json -e '(nth(1;.[] |select(.type=="transfer"))).attributes[]|select(.key=="amount").value'|tr ',' '\n'
