@@ -1,10 +1,3 @@
-use cosmwasm_std::{
-    attr, entry_point, to_json_binary, Attribute, Binary, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult,
-};
-use cw2::set_contract_version;
-use injective_auction::auction_pool::{Config, ExecuteMsg, InstantiateMsg, QueryMsg};
-
 use crate::{
     error::ContractError,
     executions::{self, settle_auction},
@@ -12,6 +5,13 @@ use crate::{
     queries,
     state::{Whitelisted, CONFIG, FUNDS_LOCKED, WHITELISTED_ADDRESSES},
 };
+use cosmwasm_std::{
+    attr, entry_point, to_json_binary, Attribute, Binary, Deps, DepsMut, Env, MessageInfo,
+    Response, StdResult,
+};
+use cw2::{get_contract_version, set_contract_version};
+use injective_auction::auction_pool::{Config, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use semver::Version;
 
 const CONTRACT_NAME: &str = "crates.io:injective-auction-pool";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -133,4 +133,18 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::CurrentAuctionBasket {} => queries::query_current_auction_basket(deps),
         QueryMsg::UnsettledAuction {} => queries::query_unsettled_auction(deps),
     }
+}
+
+// Migrate contract if version is lower than current version
+#[entry_point]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let version: Version = CONTRACT_VERSION.parse()?;
+    let storage_version: Version = get_contract_version(deps.storage)?.version.parse()?;
+    if storage_version < version {
+        set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+        // If state structure changed in any contract version in the way migration is needed, it
+        // should occur here
+    }
+    Ok(Response::new())
 }

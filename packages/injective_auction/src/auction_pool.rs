@@ -135,7 +135,6 @@ pub struct Config {
 }
 
 #[cw_serde]
-
 pub struct UnsettledAuction {
     /// The coins in the basket being auctioned
     pub basket: Vec<Coin>,
@@ -146,3 +145,6 @@ pub struct UnsettledAuction {
     /// The time when the auction will close
     pub closing_time: u64,
 }
+
+#[cw_serde]
+pub struct MigrateMsg {}
