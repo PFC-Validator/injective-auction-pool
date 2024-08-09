@@ -66,12 +66,8 @@ PREV_CODE_ID=$(injectived q wasm contract $CONTRACT_ADDRESS | jq -r '.contract_i
 echo "Previous code ID: $PREV_CODE_ID"
 
 # Execute the migration transaction
-MIGRATE_RESULT=$(injectived tx wasm migrate $CONTRACT_ADDRESS $CODE_ID "$MIGRATE_MSG" --from $FROM_KEY_NAME --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto -o json)
-echo "Migration result: $MIGRATE_RESULT" | jq
-
-MIGRATE_TXHASH=$(echo "$MIGRATE_RESULT" | jq -r '.txhash')
+MIGRATE_TXHASH=$(injectived tx wasm migrate $CONTRACT_ADDRESS $CODE_ID "$MIGRATE_MSG" --from $FROM_KEY_NAME --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto -o json | jq -r '.txhash' | tr -d '"')
 echo "Migrate transaction hash: $MIGRATE_TXHASH"
-# MIGRATE_TXHASH=0240D63A5F464C698B43046215FF27C6816BA6404C282F64E4CA77A68463699E
 
 # Query the contract state after migration
 sleep 6
@@ -80,5 +76,5 @@ echo "New code ID: $NEW_CODE_ID"
 echo "Migration successful!"
 
 
-# injectived tx wasm migrate $AUCTION_CONTRACT $CODE_ID "$MIGRATE_MSG" --from $(injectived keys show ww -a) --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto -o json | jq
-injectived q wasm contract $AUCTION_CONTRACT | jq -r '.contract_info.code_id')
+# # injectived tx wasm migrate $AUCTION_CONTRACT $CODE_ID "$MIGRATE_MSG" --from $(injectived keys show ww -a) --yes --gas-prices "160000000inj" --gas-adjustment 1.3 --gas auto -o json | jq
+# injectived q wasm contract $AUCTION_CONTRACT | jq -r '.contract_info.code_id')

@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    attr, instantiate2_address, to_json_binary, Attribute, BankMsg, Binary, CanonicalAddr,
-    CodeInfoResponse, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, Instantiate2AddressError,
-    MessageInfo, OverflowError, QueryRequest, StdResult, Uint128, WasmMsg,
+    attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CanonicalAddr,
+    CodeInfoResponse, Coin, CosmosMsg, CustomQuery, Decimal, Deps, DepsMut, Env, MessageInfo,
+    OverflowError, QueryRequest, StdResult, Uint128, WasmMsg,
 };
 
 use crate::{
@@ -11,26 +11,55 @@ use crate::{
     ContractError,
 };
 
-// Function to create a truncated address
-pub fn my_address(
-    checksum: &[u8],
-    creator: &CanonicalAddr,
-    salt: &[u8],
-) -> Result<CanonicalAddr, Instantiate2AddressError> {
-    let full_address = instantiate2_address(checksum, creator, salt)?;
-    let truncated_address = &full_address.0[..20]; // Truncate to the first 20 bytes
-    Ok(CanonicalAddr(Binary(truncated_address.to_vec())))
+pub fn predict_address<T: CustomQuery>(
+    code_id: u64,
+    label: &String,
+    deps: &Deps<T>,
+    env: &Env,
+) -> Result<(Addr, Binary), ContractError> {
+    let CodeInfoResponse {
+        checksum,
+        ..
+    } = deps.querier.query_wasm_code_info(code_id)?;
+
+    let salt = Binary::from(label.as_bytes().chunks(64).next().unwrap());
+    let creator = deps.api.addr_canonicalize(env.contract.address.as_str())?;
+
+    // Generate the full address
+    let full_canonical_addr = instantiate2_address(&checksum, &creator, &salt)?;
+
+    // Truncate the address to the first 20 bytes
+    let truncated_canonical_addr = CanonicalAddr(Binary(full_canonical_addr.0[..20].to_vec()));
+
+    // Convert the truncated canonical address to a human-readable address
+    let contract_addr = deps.api.addr_humanize(&truncated_canonical_addr)?;
+
+    Ok((contract_addr, salt))
+}
+
+pub fn create_label(env: &Env, text: &str) -> String {
+    format!(
+        "{}/{}/{}",
+        text,
+        env.block.height,
+        env.transaction.as_ref().map(|x| x.index).unwrap_or_default()
+    )
 }
 
 /// Starts a new auction
 pub(crate) fn new_auction_round(
     deps: DepsMut,
     env: &Env,
-    info: MessageInfo,
+    _info: MessageInfo,
     auction_winner: Option<String>,
     auction_winning_bid: Option<Uint128>,
 ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
     let config = CONFIG.load(deps.storage)?;
+
+    // TODO: check that info.sender is whitelisted & test it
+    // if !WHITELISTED_ADDRESSES.has(deps.storage, &_info.sender) {
+    //     return Err(ContractError::Unauthorized {});
+    // }
 
     // fetch current auction details and save them in the contract state
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
@@ -113,25 +142,12 @@ pub(crate) fn new_auction_round(
                 }));
 
                 // instantiate a treasury chest contract and get the future contract address
-                let creator = deps.api.addr_canonicalize(env.contract.address.as_str())?;
                 let code_id = config.treasury_chest_code_id;
 
-                let CodeInfoResponse {
-                    code_id: _,
-                    creator: _,
-                    checksum,
-                    ..
-                } = deps.querier.query_wasm_code_info(code_id)?;
+                let label = create_label(env, "treasure_chest");
 
-                let seed = format!(
-                    "{}{}{}",
-                    unsettled_auction.auction_round,
-                    info.sender.into_string(),
-                    env.block.height
-                );
-                let salt = Binary::from(seed.as_bytes());
-
-                let treasure_chest_address = my_address(&checksum, &creator, &salt)?.to_string();
+                let (treasure_chest_address, salt) =
+                    predict_address(code_id, &label, &deps.as_ref(), env)?;
 
                 let denom = format!(
                     "factory/{}/auction.{}",
@@ -159,14 +175,14 @@ pub(crate) fn new_auction_round(
                 TREASURE_CHEST_CONTRACTS.save(
                     deps.storage,
                     unsettled_auction.auction_round,
-                    &deps.api.addr_validate(&treasure_chest_address)?,
+                    &treasure_chest_address,
                 )?;
 
                 // transfer previous token factory's admin rights to the treasury chest contract
                 messages.push(config.token_factory_type.change_admin(
                     env.contract.address.clone(),
                     &denom,
-                    deps.api.addr_validate(&treasure_chest_address)?,
+                    treasure_chest_address.clone(),
                 ));
 
                 // create a new denom for the current auction round
