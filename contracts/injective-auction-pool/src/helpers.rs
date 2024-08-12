@@ -133,8 +133,6 @@ pub(crate) fn new_auction_round(
                 // round
                 BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
-                let mut messages: Vec<CosmosMsg> = vec![];
-
                 // transfer corresponding tokens to the rewards fee address
                 messages.push(CosmosMsg::Bank(BankMsg::Send {
                     to_address: config.rewards_fee_addr.to_string(),
@@ -162,7 +160,7 @@ pub(crate) fn new_auction_round(
                         unsettled_auction.auction_round
                     ),
                     msg: to_json_binary(&treasurechest::chest::InstantiateMsg {
-                        denom: config.native_denom.clone(),
+                        denom: denom.clone(),
                         owner: env.contract.address.to_string(),
                         notes: denom.clone(),
                         token_factory: config.token_factory_type.to_string(),
