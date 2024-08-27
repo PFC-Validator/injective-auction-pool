@@ -9,6 +9,6 @@
       "$FROM_ADDR"
    ],
    "min_next_bid_increment_rate": "0.0025",
-   "treasury_chest_code_id": $TREASURE,
+   "treasury_chest_code_id": $TREASURE_CODE_ID,
    "min_return": "0.05"
 }
