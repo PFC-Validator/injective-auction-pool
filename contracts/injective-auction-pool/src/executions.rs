@@ -119,10 +119,21 @@ pub(crate) fn join_pool(
         });
     }
 
-    let mut messages = vec![];
+    let unsettled_auction = UNSETTLED_AUCTION.load(deps.storage)?;
+
+    // if the current auction round is different from the unsettled auction round,
+    // prevent the user from joining the pool
+    if unsettled_auction.auction_round != current_auction_round.u64() {
+        return Err(ContractError::AuctionRoundNotSettled {
+            unsettled_auction_round: unsettled_auction.auction_round,
+            current_auction_round: current_auction_round.u64(),
+        });
+    }
 
     // mint the lp token and send it to the user
-    let lp_subdenom = UNSETTLED_AUCTION.load(deps.storage)?.lp_subdenom;
+    let mut messages = vec![];
+    let lp_subdenom = unsettled_auction.lp_subdenom;
+
     messages.push(config.token_factory_type.mint(
         env.contract.address.clone(),
         format!("factory/{}/auction.{}", env.contract.address.clone(), lp_subdenom).as_str(),
@@ -283,6 +294,7 @@ pub fn settle_auction(
     auction_round: u64,
     auction_winner: String,
     auction_winning_bid: Uint128,
+    basket_reward: Vec<cosmwasm_std::Coin>,
 ) -> Result<Response, ContractError> {
     // only whitelist addresses can settle the auction for now until the
     // contract can query the aunction module for a specific auction round
@@ -311,8 +323,14 @@ pub fn settle_auction(
 
     FUNDS_LOCKED.save(deps.storage, &false)?;
 
-    let (messages, attributes) =
-        new_auction_round(deps, &env, info, Some(auction_winner), Some(auction_winning_bid))?;
+    let (messages, attributes) = new_auction_round(
+        deps,
+        &env,
+        info,
+        Some(auction_winner),
+        Some(auction_winning_bid),
+        basket_reward,
+    )?;
 
     Ok(Response::default()
         .add_attribute("action", "settle_auction")

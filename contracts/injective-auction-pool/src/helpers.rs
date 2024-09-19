@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use cosmwasm_std::{
     attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CanonicalAddr,
     CodeInfoResponse, Coin, CosmosMsg, CustomQuery, Decimal, Deps, DepsMut, Env, MessageInfo,
@@ -53,28 +51,14 @@ pub(crate) fn new_auction_round(
     _info: MessageInfo,
     auction_winner: Option<String>,
     auction_winning_bid: Option<Uint128>,
+    basket_reward: Vec<Coin>,
 ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
     let config = CONFIG.load(deps.storage)?;
-
-    // TODO: check that info.sender is whitelisted & test it
-    // if !WHITELISTED_ADDRESSES.has(deps.storage, &_info.sender) {
-    //     return Err(ContractError::Unauthorized {});
-    // }
 
     // fetch current auction details and save them in the contract state
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
 
     let current_auction_round = current_auction_round_response.auction_round;
-
-    let current_basket = current_auction_round_response
-        .amount
-        .iter()
-        .map(|coin| Coin {
-            amount: Uint128::from_str(&coin.amount.to_string())
-                .expect("Failed to parse coin amount"),
-            denom: coin.denom.clone(),
-        })
-        .collect();
 
     let unsettled_auction = UNSETTLED_AUCTION.may_load(deps.storage)?;
 
@@ -100,7 +84,6 @@ pub(crate) fn new_auction_round(
                     }),
                 )?;
 
-                let unsettled_basket = unsettled_auction.basket;
                 let mut basket_fees = vec![];
                 let mut basket_to_treasure_chest = vec![];
 
@@ -117,7 +100,11 @@ pub(crate) fn new_auction_round(
                 }
 
                 // split the basket, taking the rewards fees into account
-                for coin in unsettled_basket.iter() {
+                if basket_reward.is_empty() {
+                    return Err(ContractError::EmptyBasketRewards {});
+                }
+
+                for coin in basket_reward.iter() {
                     let fee = coin.amount * config.rewards_fee;
                     basket_fees.push(Coin {
                         denom: coin.denom.clone(),
@@ -189,20 +176,9 @@ pub(crate) fn new_auction_round(
                     format!("auction.{}", new_subdenom).as_str(),
                 ));
 
-                let basket = current_auction_round_response
-                    .amount
-                    .iter()
-                    .map(|coin| Coin {
-                        amount: Uint128::from_str(&coin.amount.to_string())
-                            .expect("Failed to parse coin amount"),
-                        denom: coin.denom.clone(),
-                    })
-                    .collect();
-
                 UNSETTLED_AUCTION.save(
                     deps.storage,
                     &Auction {
-                        basket,
                         auction_round: current_auction_round_response.auction_round.u64(),
                         lp_subdenom: new_subdenom,
                         closing_time: current_auction_round_response.auction_closing_time.i64()
@@ -226,15 +202,6 @@ pub(crate) fn new_auction_round(
                 UNSETTLED_AUCTION.save(
                     deps.storage,
                     &Auction {
-                        basket: current_auction_round_response
-                            .amount
-                            .iter()
-                            .map(|coin| Coin {
-                                amount: Uint128::from_str(&coin.amount.to_string())
-                                    .expect("Failed to parse coin amount"),
-                                denom: coin.denom.clone(),
-                            })
-                            .collect(),
                         auction_round: current_auction_round_response.auction_round.u64(),
                         lp_subdenom: unsettled_auction.lp_subdenom,
                         closing_time: current_auction_round_response.auction_closing_time.i64()
@@ -254,7 +221,6 @@ pub(crate) fn new_auction_round(
             UNSETTLED_AUCTION.save(
                 deps.storage,
                 &Auction {
-                    basket: current_basket,
                     auction_round: current_auction_round_response.auction_round.u64(),
                     lp_subdenom: 0,
                     closing_time: current_auction_round_response.auction_closing_time.i64() as u64,

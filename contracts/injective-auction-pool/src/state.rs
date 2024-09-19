@@ -5,8 +5,6 @@ use injective_auction::auction_pool::Config;
 
 #[cw_serde]
 pub struct Auction {
-    /// The coins in the basket being auctioned
-    pub basket: Vec<Coin>,
     /// The auction round number
     pub auction_round: u64,
     /// A unique number that is used to create new token factory denoms

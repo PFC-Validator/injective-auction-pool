@@ -1,7 +1,8 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::Coin;
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
-use treasurechest::tf::{injective::denom::Coin, tokenfactory::TokenFactoryType};
+use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -61,6 +62,9 @@ pub enum ExecuteMsg {
         auction_winner: String,
         /// The amount bid by the winner of the auction
         auction_winning_bid: Uint128,
+        /// The rewards to be sent to the vault. As rewards are being added to the auction module
+        /// on each block, the eaact amount can only be know once the auction is finished
+        basket_rewards: Vec<Coin>,
     },
 }
 

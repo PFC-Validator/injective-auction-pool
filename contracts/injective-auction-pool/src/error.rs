@@ -84,6 +84,18 @@ pub enum ContractError {
 
     #[error("Semver parsing error: {0}")]
     SemVer(String),
+
+    #[error(
+        "Previous auction round has not been settled. Unsettled auction round: {unsettled_auction_round}.\
+         Current auction round: {current_auction_round}"
+    )]
+    AuctionRoundNotSettled {
+        unsettled_auction_round: u64,
+        current_auction_round: u64,
+    },
+
+    #[error("Basket rewards is empty")]
+    EmptyBasketRewards {},
 }
 
 impl From<semver::Error> for ContractError {
