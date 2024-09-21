@@ -1,3 +1,4 @@
+use std::num::TryFromIntError;
 use cosmwasm_std::{CheckedFromRatioError, DivideByZeroError, OverflowError, StdError};
 use cw_ownable::OwnershipError;
 use thiserror::Error;
@@ -10,6 +11,8 @@ pub enum ContractError {
     Ownership(#[from] OwnershipError),
     #[error("{0}")]
     OverflowError(#[from] OverflowError),
+    #[error("{0}")]
+    TryFromIntError(#[from] TryFromIntError),
 
     #[error("{0}")]
     DivideByZeroError(#[from] DivideByZeroError),

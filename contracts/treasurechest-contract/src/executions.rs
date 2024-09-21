@@ -1,9 +1,13 @@
 use std::{ops::Mul, str::FromStr};
+use std::collections::HashMap;
+
+const DEFAULT_SIZE:u32 = 20;
 
 use cosmwasm_std::{
     Addr, BankMsg, Coin, CosmosMsg, DepsMut, Env, Event, MessageInfo, Order, Response, StdResult,
     Uint128,
 };
+
 use treasurechest::{errors::ContractError, tf::tokenfactory::TokenFactoryType};
 
 use crate::state::{CONFIG, TOTAL_REWARDS};
@@ -76,27 +80,32 @@ pub fn change_token_factory(
         .add_attribute("action", "treasurechest/change_token_factory"))
 }
 
-pub fn return_dust(deps: DepsMut, env: Env, sender: Addr) -> Result<Response, ContractError> {
+pub fn return_dust(deps: DepsMut, env: Env, sender: Addr, limit: Option<u32>) -> Result<Response, ContractError> {
     cw_ownable::assert_owner(deps.storage, &sender)?;
     let config = CONFIG.load(deps.storage)?;
     let balances = deps
         .querier
         .query_all_balances(env.contract.address)?
         .into_iter()
-        .filter(|x| x.denom != config.denom)
-        .collect::<Vec<Coin>>();
+        .filter(|x| x.denom != config.denom).map(|coin| (coin.denom,coin.amount))
+        .collect::<HashMap<String,Uint128>>();
     let mut balances_out = vec![];
 
-    for entry in balances {
-        if let Some(one_amt) = TOTAL_REWARDS.may_load(deps.storage, entry.denom.clone())? {
-            if one_amt.to_uint_floor() > entry.amount {
-                TOTAL_REWARDS.remove(deps.storage, entry.denom.clone());
-                balances_out.push(entry)
+    let rewards = TOTAL_REWARDS.range(deps.storage, None,None,Order::Ascending).take(limit.unwrap_or(DEFAULT_SIZE).try_into()?).collect::<StdResult<Vec<_>>>()?;
+    for reward in rewards {
+        let reward_amt = reward.1.to_uint_floor();
+        if let Some(token_balance) = balances.get( &reward.0) {
+            if &reward_amt  > token_balance{
+                TOTAL_REWARDS.remove(deps.storage, reward.0.clone());
+                balances_out.push(Coin{denom: reward.0, amount: token_balance.clone()})
             }
         }
     }
     // balances_out should only contain the dust now.
     // TOTAL rewards should no longer show that token
+    if balances_out.is_empty() {
+       return Ok(Response::new().add_attribute("action", "treasurechest/return_dust").add_attribute("dust","no-dust"))
+    }
 
     let msg = CosmosMsg::Bank(BankMsg::Send {
         to_address: sender.to_string(),
