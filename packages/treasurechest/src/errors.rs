@@ -26,6 +26,9 @@ pub enum ContractError {
     #[error("invalid token factory type {0}")]
     TokenFactoryTypeInvalid(String),
 
+    #[error("Too many outstanding redemption tokens {0} - min = {1}")]
+    TicketsOutstanding(u128,u128),
+
     #[error("Unauthorized")]
     Unauthorized {},
 

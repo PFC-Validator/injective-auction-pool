@@ -1,13 +1,12 @@
 use std::{ops::Mul, str::FromStr};
 use std::collections::HashMap;
+use std::ops::Sub;
 
 const DEFAULT_SIZE:u32 = 20;
+const MIN_TICKETS:u128 = 2;
 
-use cosmwasm_std::{
-    Addr, BankMsg, Coin, CosmosMsg, DepsMut, Env, Event, MessageInfo, Order, Response, StdResult,
-    Uint128,
-};
-
+use cosmwasm_std::{Addr, BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, DepsMut, Env, Event, MessageInfo, Order,  Response, StdResult, Uint128};
+use cosmwasm_std::QueryRequest::Bank;
 use treasurechest::{errors::ContractError, tf::tokenfactory::TokenFactoryType};
 
 use crate::state::{CONFIG, TOTAL_REWARDS};
@@ -83,6 +82,20 @@ pub fn change_token_factory(
 pub fn return_dust(deps: DepsMut, env: Env, sender: Addr, limit: Option<u32>) -> Result<Response, ContractError> {
     cw_ownable::assert_owner(deps.storage, &sender)?;
     let config = CONFIG.load(deps.storage)?;
+
+    let denom_total = deps.querier.query::<BalanceResponse>(&Bank(BankQuery::Supply {denom: config.denom.clone()}))?;
+    if config.burn_it {
+        if denom_total .amount.amount.u128()> MIN_TICKETS {
+            return Err(ContractError::TicketsOutstanding(denom_total.amount.amount.u128(),MIN_TICKETS))
+        }
+    } else {
+        let ticket_balance = deps.querier.query_balance(env.contract.address.clone(),config.denom.clone())?;
+        let outstanding = denom_total.amount.amount.sub(ticket_balance.amount);
+        if outstanding.u128() > MIN_TICKETS {
+            return Err(ContractError::TicketsOutstanding(outstanding.u128(),MIN_TICKETS))
+        }
+    }
+
     let balances = deps
         .querier
         .query_all_balances(env.contract.address)?
