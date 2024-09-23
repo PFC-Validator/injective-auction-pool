@@ -62,10 +62,8 @@ pub enum ExecuteMsg {
         auction_winner: String,
         /// The amount bid by the winner of the auction
         auction_winning_bid: Uint128,
-        /// The rewards to be sent to the vault. As rewards are being added to the auction module
-        /// on each block, the eaact amount can only be know once the auction is finished
-        basket_rewards: Vec<Coin>,
     },
+    TrySettleAuction {},
 }
 
 #[cw_ownable_query]

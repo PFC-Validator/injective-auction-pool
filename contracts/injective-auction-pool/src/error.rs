@@ -96,6 +96,17 @@ pub enum ContractError {
 
     #[error("Basket rewards is empty")]
     EmptyBasketRewards {},
+
+    #[error("Empty auction result")]
+    EmptyAuctionResult {},
+
+    #[error(
+        "Auction round missmatch. Unsettled auction round: {unsettled}. Latest auction round: {latest}"
+    )]
+    AuctionRoundMismatch {
+        unsettled: u64,
+        latest: u64,
+    },
 }
 
 impl From<semver::Error> for ContractError {

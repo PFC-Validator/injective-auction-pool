@@ -111,16 +111,8 @@ pub fn execute(
             auction_round,
             auction_winner,
             auction_winning_bid,
-            basket_rewards,
-        } => settle_auction(
-            deps,
-            env,
-            info,
-            auction_round,
-            auction_winner,
-            auction_winning_bid,
-            basket_rewards,
-        ),
+        } => settle_auction(deps, env, info, auction_round, auction_winner, auction_winning_bid),
+        ExecuteMsg::TrySettleAuction {} => executions::try_settle_auction(deps, env, info),
     }
 }
 

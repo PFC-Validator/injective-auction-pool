@@ -1,8 +1,11 @@
+use std::str::FromStr;
+
 use cosmwasm_std::{
     attr, instantiate2_address, to_json_binary, Addr, Attribute, BankMsg, Binary, CanonicalAddr,
     CodeInfoResponse, Coin, CosmosMsg, CustomQuery, Decimal, Deps, DepsMut, Env, MessageInfo,
     OverflowError, QueryRequest, StdResult, Uint128, WasmMsg,
 };
+use injective_std::types::injective::auction::v1beta1::QueryLastAuctionResultResponse;
 
 use crate::{
     state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION},
@@ -59,6 +62,16 @@ pub(crate) fn new_auction_round(
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
 
     let current_auction_round = current_auction_round_response.auction_round;
+
+    let new_basket = current_auction_round_response
+        .amount
+        .iter()
+        .map(|coin| Coin {
+            amount: Uint128::from_str(&coin.amount.to_string())
+                .expect("Failed to parse coin amount"),
+            denom: coin.denom.clone(),
+        })
+        .collect();
 
     let unsettled_auction = UNSETTLED_AUCTION.may_load(deps.storage)?;
 
@@ -191,6 +204,7 @@ pub(crate) fn new_auction_round(
                 UNSETTLED_AUCTION.save(
                     deps.storage,
                     &Auction {
+                        basket: new_basket,
                         auction_round: current_auction_round_response.auction_round.u64(),
                         lp_subdenom: new_subdenom,
                         closing_time: current_auction_round_response.auction_closing_time.i64()
@@ -214,6 +228,7 @@ pub(crate) fn new_auction_round(
                 UNSETTLED_AUCTION.save(
                     deps.storage,
                     &Auction {
+                        basket: new_basket,
                         auction_round: current_auction_round_response.auction_round.u64(),
                         lp_subdenom: unsettled_auction.lp_subdenom,
                         closing_time: current_auction_round_response.auction_closing_time.i64()
@@ -233,6 +248,7 @@ pub(crate) fn new_auction_round(
             UNSETTLED_AUCTION.save(
                 deps.storage,
                 &Auction {
+                    basket: new_basket,
                     auction_round: current_auction_round_response.auction_round.u64(),
                     lp_subdenom: 0,
                     closing_time: current_auction_round_response.auction_closing_time.i64() as u64,
@@ -283,4 +299,15 @@ fn add_coin_to_basket(basket: &mut Vec<Coin>, coin: Coin) {
     } else {
         basket.push(coin);
     }
+}
+
+/// Queries the latest auction result
+pub(crate) fn query_latest_auction_result(deps: Deps) -> StdResult<QueryLastAuctionResultResponse> {
+    let last_auction_result_response: QueryLastAuctionResultResponse =
+        deps.querier.query(&QueryRequest::Stargate {
+            path: "/injective.auction.v1beta1.Query/LastAuctionResult".to_string(),
+            data: [].into(),
+        })?;
+
+    Ok(last_auction_result_response)
 }

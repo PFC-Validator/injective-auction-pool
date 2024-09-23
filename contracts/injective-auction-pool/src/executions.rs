@@ -5,7 +5,9 @@ use injective_std::types::cosmos::base::v1beta1::Coin;
 use injective_std::types::injective::auction::v1beta1::MsgBid;
 
 use crate::{
-    helpers::{new_auction_round, query_current_auction, validate_percentage},
+    helpers::{
+        new_auction_round, query_current_auction, query_latest_auction_result, validate_percentage,
+    },
     state::{
         Whitelisted, BIDDING_BALANCE, CONFIG, FUNDS_LOCKED, UNSETTLED_AUCTION,
         WHITELISTED_ADDRESSES,
@@ -294,7 +296,6 @@ pub fn settle_auction(
     auction_round: u64,
     auction_winner: String,
     auction_winning_bid: Uint128,
-    basket_reward: Vec<cosmwasm_std::Coin>,
 ) -> Result<Response, ContractError> {
     // only whitelist addresses can settle the auction for now until the
     // contract can query the aunction module for a specific auction round
@@ -329,11 +330,48 @@ pub fn settle_auction(
         info,
         Some(auction_winner),
         Some(auction_winning_bid),
-        basket_reward,
+        unsettled_auction.basket,
     )?;
 
     Ok(Response::default()
         .add_attribute("action", "settle_auction")
+        .add_messages(messages)
+        .add_attributes(attributes))
+}
+
+/// Tries to settle the latest auction permissionlessly
+pub fn try_settle_auction(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let unsettled_auction = UNSETTLED_AUCTION.load(deps.storage)?;
+
+    let latest_auction_result_response = query_latest_auction_result(deps.as_ref())?
+        .last_auction_result
+        .ok_or(ContractError::EmptyAuctionResult {})?;
+
+    // prevents the contract from settling the auction round
+    if unsettled_auction.auction_round != latest_auction_result_response.round {
+        return Err(ContractError::AuctionRoundMismatch {
+            unsettled: unsettled_auction.auction_round,
+            latest: latest_auction_result_response.round,
+        });
+    }
+
+    FUNDS_LOCKED.save(deps.storage, &false)?;
+
+    let (messages, attributes) = new_auction_round(
+        deps,
+        &env,
+        info,
+        Some(latest_auction_result_response.winner),
+        Some(latest_auction_result_response.amount.parse()?),
+        unsettled_auction.basket,
+    )?;
+
+    Ok(Response::default()
+        .add_attribute("action", "try_settle_auction")
         .add_messages(messages)
         .add_attributes(attributes))
 }
