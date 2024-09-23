@@ -92,6 +92,7 @@ pub(crate) fn new_auction_round(
                 let remaining_bidding_balance =
                     BIDDING_BALANCE.load(deps.storage)?.checked_sub(auction_winning_bid)?;
 
+                // If there is a remaining bidding balance, add it to the basket
                 if remaining_bidding_balance > Uint128::zero() {
                     basket_to_treasure_chest.push(Coin {
                         denom: config.native_denom.clone(),
@@ -99,21 +100,30 @@ pub(crate) fn new_auction_round(
                     });
                 }
 
-                // split the basket, taking the rewards fees into account
+                // Split the basket, taking the rewards fees into account
                 if basket_reward.is_empty() {
                     return Err(ContractError::EmptyBasketRewards {});
                 }
 
                 for coin in basket_reward.iter() {
                     let fee = coin.amount * config.rewards_fee;
-                    basket_fees.push(Coin {
-                        denom: coin.denom.clone(),
-                        amount: fee,
-                    });
-                    basket_to_treasure_chest.push(Coin {
-                        denom: coin.denom.clone(),
-                        amount: coin.amount.checked_sub(fee)?,
-                    });
+                    if !fee.is_zero() {
+                        basket_fees.push(Coin {
+                            denom: coin.denom.clone(),
+                            amount: fee,
+                        })
+                    }
+
+                    let net_amount = coin.amount.checked_sub(fee)?;
+                    if !net_amount.is_zero() {
+                        add_coin_to_basket(
+                            &mut basket_to_treasure_chest,
+                            Coin {
+                                denom: coin.denom.clone(),
+                                amount: net_amount,
+                            },
+                        )
+                    }
                 }
 
                 // reset the bidding balance to 0 if we won, otherwise keep the balance for the next
@@ -121,10 +131,12 @@ pub(crate) fn new_auction_round(
                 BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
                 // transfer corresponding tokens to the rewards fee address
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: config.rewards_fee_addr.to_string(),
-                    amount: basket_fees,
-                }));
+                if !basket_fees.is_empty() {
+                    messages.push(CosmosMsg::Bank(BankMsg::Send {
+                        to_address: config.rewards_fee_addr.to_string(),
+                        amount: basket_fees,
+                    }))
+                }
 
                 // instantiate a treasury chest contract and get the future contract address
                 let code_id = config.treasury_chest_code_id;
@@ -262,4 +274,13 @@ pub(crate) fn query_current_auction(
         })?;
 
     Ok(current_auction_basket_response)
+}
+
+// Adds coins to the basket or increments the amount if the coin already exists (avoiding duplicates)
+fn add_coin_to_basket(basket: &mut Vec<Coin>, coin: Coin) {
+    if let Some(existing_coin) = basket.iter_mut().find(|c| c.denom == coin.denom) {
+        existing_coin.amount += coin.amount;
+    } else {
+        basket.push(coin);
+    }
 }
