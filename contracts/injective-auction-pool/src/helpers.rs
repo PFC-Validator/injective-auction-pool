@@ -5,6 +5,7 @@ use cosmwasm_std::{
     CodeInfoResponse, Coin, CosmosMsg, CustomQuery, Decimal, Deps, DepsMut, Env, MessageInfo,
     OverflowError, QueryRequest, StdResult, Uint128, WasmMsg,
 };
+use cw_utils::must_pay;
 use injective_std::types::injective::auction::v1beta1::QueryLastAuctionResultResponse;
 
 use crate::{
@@ -51,18 +52,14 @@ pub fn create_label(env: &Env, text: &str) -> String {
 pub(crate) fn new_auction_round(
     deps: DepsMut,
     env: &Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     auction_winner: Option<String>,
     auction_winning_bid: Option<Uint128>,
-    basket_reward: Vec<Coin>,
+    old_basket: Vec<Coin>,
 ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
-    // fetch current auction details and save them in the contract state
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
-
-    let current_auction_round = current_auction_round_response.auction_round;
-
     let new_basket = current_auction_round_response
         .amount
         .iter()
@@ -114,11 +111,11 @@ pub(crate) fn new_auction_round(
                 }
 
                 // Split the basket, taking the rewards fees into account
-                if basket_reward.is_empty() {
+                if old_basket.is_empty() {
                     return Err(ContractError::EmptyBasketRewards {});
                 }
 
-                for coin in basket_reward.iter() {
+                for coin in old_basket.iter() {
                     let fee = coin.amount * config.rewards_fee;
                     if !fee.is_zero() {
                         basket_fees.push(Coin {
@@ -139,8 +136,7 @@ pub(crate) fn new_auction_round(
                     }
                 }
 
-                // reset the bidding balance to 0 if we won, otherwise keep the balance for the next
-                // round
+                // reset the bidding balance to 0 if we won, otherwise keep the balance for the next round
                 BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
                 // transfer corresponding tokens to the rewards fee address
@@ -196,11 +192,19 @@ pub(crate) fn new_auction_round(
                 ));
 
                 // create a new denom for the current auction round
+                let amount = must_pay(&info, &config.native_denom)?;
+                if amount < config.min_balance {
+                    return Err(ContractError::InsufficientFunds {
+                        native_denom: config.native_denom,
+                        min_balance: config.min_balance,
+                    });
+                }
                 messages.push(config.token_factory_type.create_denom(
                     env.contract.address.clone(),
                     format!("auction.{}", new_subdenom).as_str(),
                 ));
 
+                // save the current auction details to the contract state
                 UNSETTLED_AUCTION.save(
                     deps.storage,
                     &Auction {
@@ -215,7 +219,10 @@ pub(crate) fn new_auction_round(
                     "settled_auction_round",
                     unsettled_auction.auction_round.to_string(),
                 ));
-                attributes.push(attr("new_auction_round", current_auction_round.to_string()));
+                attributes.push(attr(
+                    "new_auction_round",
+                    current_auction_round_response.auction_round.to_string(),
+                ));
                 attributes.push(attr("treasure_chest_address", treasure_chest_address.to_string()));
                 attributes.push(attr("new_subdenom", format!("auction.{}", new_subdenom)));
 
@@ -239,7 +246,10 @@ pub(crate) fn new_auction_round(
                     "settled_auction_round",
                     unsettled_auction.auction_round.to_string(),
                 ));
-                attributes.push(attr("new_auction_round", current_auction_round.to_string()));
+                attributes.push(attr(
+                    "new_auction_round",
+                    current_auction_round_response.auction_round.to_string(),
+                ));
                 Ok((messages, attributes))
             }
         },
@@ -262,7 +272,10 @@ pub(crate) fn new_auction_round(
                 config.token_factory_type.create_denom(env.contract.address.clone(), "auction.0"),
             );
 
-            attributes.push(attr("new_auction_round", current_auction_round.to_string()));
+            attributes.push(attr(
+                "new_auction_round",
+                current_auction_round_response.auction_round.to_string(),
+            ));
             attributes.push(attr("lp_subdenom", "auction.0"));
             Ok((messages, attributes))
         },

@@ -351,7 +351,7 @@ pub fn try_settle_auction(
         .last_auction_result
         .ok_or(ContractError::EmptyAuctionResult {})?;
 
-    // prevents the contract from settling the auction round
+    // can only settle the latest auction round permissionlessly
     if unsettled_auction.auction_round != latest_auction_result_response.round {
         return Err(ContractError::AuctionRoundMismatch {
             unsettled: unsettled_auction.auction_round,
@@ -372,6 +372,7 @@ pub fn try_settle_auction(
 
     Ok(Response::default()
         .add_attribute("action", "try_settle_auction")
+        .add_attribute("auction_round", unsettled_auction.auction_round.to_string())
         .add_messages(messages)
         .add_attributes(attributes))
 }

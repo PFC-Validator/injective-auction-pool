@@ -61,8 +61,7 @@ pub enum ContractError {
     MissingAuctionWinningBid,
 
     #[error(
-        "Insufficient funds. Must deposit at least {min_balance} {native_denom} to instantiate \
-         the contract"
+        "Insufficient funds. Must deposit at least {min_balance} {native_denom} to create a new denom"
     )]
     InsufficientFunds {
         native_denom: String,
