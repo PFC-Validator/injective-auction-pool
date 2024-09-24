@@ -132,7 +132,7 @@ pub(crate) fn new_auction_round(
                                 denom: coin.denom.clone(),
                                 amount: net_amount,
                             },
-                        )
+                        )?
                     }
                 }
 
@@ -306,12 +306,13 @@ pub(crate) fn query_current_auction(
 }
 
 // Adds coins to the basket or increments the amount if the coin already exists (avoiding duplicates)
-fn add_coin_to_basket(basket: &mut Vec<Coin>, coin: Coin) {
+fn add_coin_to_basket(basket: &mut Vec<Coin>, coin: Coin) -> Result<(), ContractError> {
     if let Some(existing_coin) = basket.iter_mut().find(|c| c.denom == coin.denom) {
-        existing_coin.amount += coin.amount;
+        existing_coin.amount = existing_coin.amount.checked_add(coin.amount)?;
     } else {
         basket.push(coin);
     }
+    Ok(())
 }
 
 /// Queries the latest auction result
