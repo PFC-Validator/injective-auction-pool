@@ -42,8 +42,8 @@ impl TreasureChestContract {
         })
     }
 
-    pub fn return_dust(&self) -> StdResult<CosmosMsg> {
-        self.call(ExecuteMsg::ReturnDust {})
+    pub fn return_dust(&self, limit:Option<u32>) -> StdResult<CosmosMsg> {
+        self.call(ExecuteMsg::ReturnDust {limit})
     }
 
     pub fn config(&self, app: &App) -> StdResult<ConfigResponse> {

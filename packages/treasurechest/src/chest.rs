@@ -24,7 +24,7 @@ pub enum ExecuteMsg {
     /// Withdraw pending rewards
     Withdraw {},
     /// If balance is below >1< tickets worth (ADMIN only)
-    ReturnDust {},
+    ReturnDust { limit: Option<u32>},
     /// change token factory type (ADMIN only)
     ChangeTokenFactory {
         token_factory_type: String,

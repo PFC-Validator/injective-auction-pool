@@ -73,7 +73,7 @@ pub fn execute(
         ExecuteMsg::ChangeTokenFactory {
             token_factory_type,
         } => change_token_factory(deps, info.sender, &token_factory_type),
-        ExecuteMsg::ReturnDust {} => return_dust(deps, env, info.sender),
+        ExecuteMsg::ReturnDust {limit} => return_dust(deps, env, info.sender, limit),
     }
 }
 

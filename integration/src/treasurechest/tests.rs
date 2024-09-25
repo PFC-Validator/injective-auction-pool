@@ -335,7 +335,7 @@ pub fn test_withdraw() -> AnyResult<()> {
     assert_eq!(state.outstanding, Uint128::zero());
 
     app.update_block(|f| f.height += 1);
-    let res_admin = app.execute(Addr::unchecked(ADMIN), chest.return_dust()?)?;
+    let res_admin = app.execute(Addr::unchecked(ADMIN), chest.return_dust(None)?)?;
     for e in get_events("transfer", &res_admin.events) {
         if let Some(amount) = get_attribute("amount", &e.attributes) {
             let coins = amount.split(',').map(|x| x.to_string()).collect::<Vec<_>>();
