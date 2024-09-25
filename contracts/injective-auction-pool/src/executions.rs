@@ -134,16 +134,12 @@ pub(crate) fn join_pool(
 
     // mint the lp token and send it to the user
     let mut messages = vec![];
-    let lp_subdenom = unsettled_auction.lp_subdenom;
+    let lp_denom =
+        format!("factory/{}/auction.{}", env.contract.address, unsettled_auction.lp_subdenom);
 
-    messages.push(config.token_factory_type.mint(
-        env.contract.address.clone(),
-        format!("factory/{}/auction.{}", env.contract.address.clone(), lp_subdenom).as_str(),
-        amount,
-    ));
+    messages.push(config.token_factory_type.mint(env.contract.address.clone(), &lp_denom, amount));
 
     // send the minted lp token to the user address
-    let lp_denom = format!("factory/{}/auction.{}", env.contract.address, lp_subdenom);
     messages.push(
         BankMsg::Send {
             to_address: info.sender.to_string(),
