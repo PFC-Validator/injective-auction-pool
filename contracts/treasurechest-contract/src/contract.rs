@@ -39,7 +39,6 @@ pub fn instantiate(
     let supply = deps.querier.query_supply(msg.denom.clone())?.amount;
     let split_rewards = split_reward_by_supply(info.funds, supply);
 
-    TOTAL_REWARDS.clear(deps.storage);
     for entry in split_rewards {
         TOTAL_REWARDS.save(deps.storage, entry.0, &entry.1)?;
     }
@@ -73,7 +72,9 @@ pub fn execute(
         ExecuteMsg::ChangeTokenFactory {
             token_factory_type,
         } => change_token_factory(deps, info.sender, &token_factory_type),
-        ExecuteMsg::ReturnDust {limit} => return_dust(deps, env, info.sender, limit),
+        ExecuteMsg::ReturnDust {
+            limit,
+        } => return_dust(deps, env, info.sender, limit),
     }
 }
 
@@ -97,7 +98,7 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
 
     match contract_version.contract.as_ref() {
         #[allow(clippy::single_match)]
-        "pfc-treasurechest" => {},
+        CONTRACT_NAME => {},
         _ => {
             return Err(ContractError::MigrationError {
                 current_name: contract_version.contract,
