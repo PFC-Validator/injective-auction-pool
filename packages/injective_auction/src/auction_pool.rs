@@ -1,7 +1,8 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::Coin;
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
-use treasurechest::tf::{injective::denom::Coin, tokenfactory::TokenFactoryType};
+use treasurechest::tf::tokenfactory::TokenFactoryType;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -62,6 +63,7 @@ pub enum ExecuteMsg {
         /// The amount bid by the winner of the auction
         auction_winning_bid: Uint128,
     },
+    TrySettleAuction {},
 }
 
 #[cw_ownable_query]

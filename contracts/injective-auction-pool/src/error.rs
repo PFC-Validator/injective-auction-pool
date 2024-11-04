@@ -61,8 +61,7 @@ pub enum ContractError {
     MissingAuctionWinningBid,
 
     #[error(
-        "Insufficient funds. Must deposit at least {min_balance} {native_denom} to instantiate \
-         the contract"
+        "Insufficient funds. Must deposit at least {min_balance} {native_denom} to create a new denom"
     )]
     InsufficientFunds {
         native_denom: String,
@@ -84,6 +83,29 @@ pub enum ContractError {
 
     #[error("Semver parsing error: {0}")]
     SemVer(String),
+
+    #[error(
+        "Previous auction round has not been settled. Unsettled auction round: {unsettled_auction_round}.\
+         Current auction round: {current_auction_round}"
+    )]
+    AuctionRoundNotSettled {
+        unsettled_auction_round: u64,
+        current_auction_round: u64,
+    },
+
+    #[error("Basket rewards is empty")]
+    EmptyBasketRewards {},
+
+    #[error("Empty auction result")]
+    EmptyAuctionResult {},
+
+    #[error(
+        "Auction round missmatch. Unsettled auction round: {unsettled}. Latest auction round: {latest}"
+    )]
+    AuctionRoundMismatch {
+        unsettled: u64,
+        latest: u64,
+    },
 }
 
 impl From<semver::Error> for ContractError {

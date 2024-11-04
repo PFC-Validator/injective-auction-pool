@@ -5,6 +5,8 @@ use cosmwasm_std::{
     CodeInfoResponse, Coin, CosmosMsg, CustomQuery, Decimal, Deps, DepsMut, Env, MessageInfo,
     OverflowError, QueryRequest, StdResult, Uint128, WasmMsg,
 };
+use cw_utils::must_pay;
+use injective_std::types::injective::auction::v1beta1::QueryLastAuctionResultResponse;
 
 use crate::{
     state::{Auction, BIDDING_BALANCE, CONFIG, TREASURE_CHEST_CONTRACTS, UNSETTLED_AUCTION},
@@ -50,23 +52,15 @@ pub fn create_label(env: &Env, text: &str) -> String {
 pub(crate) fn new_auction_round(
     deps: DepsMut,
     env: &Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     auction_winner: Option<String>,
     auction_winning_bid: Option<Uint128>,
+    old_basket: Vec<Coin>,
 ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
-    // TODO: check that info.sender is whitelisted & test it
-    // if !WHITELISTED_ADDRESSES.has(deps.storage, &_info.sender) {
-    //     return Err(ContractError::Unauthorized {});
-    // }
-
-    // fetch current auction details and save them in the contract state
     let current_auction_round_response = query_current_auction(deps.as_ref())?;
-
-    let current_auction_round = current_auction_round_response.auction_round;
-
-    let current_basket = current_auction_round_response
+    let new_basket = current_auction_round_response
         .amount
         .iter()
         .map(|coin| Coin {
@@ -100,7 +94,6 @@ pub(crate) fn new_auction_round(
                     }),
                 )?;
 
-                let unsettled_basket = unsettled_auction.basket;
                 let mut basket_fees = vec![];
                 let mut basket_to_treasure_chest = vec![];
 
@@ -109,6 +102,7 @@ pub(crate) fn new_auction_round(
                 let remaining_bidding_balance =
                     BIDDING_BALANCE.load(deps.storage)?.checked_sub(auction_winning_bid)?;
 
+                // If there is a remaining bidding balance, add it to the basket
                 if remaining_bidding_balance > Uint128::zero() {
                     basket_to_treasure_chest.push(Coin {
                         denom: config.native_denom.clone(),
@@ -116,28 +110,42 @@ pub(crate) fn new_auction_round(
                     });
                 }
 
-                // split the basket, taking the rewards fees into account
-                for coin in unsettled_basket.iter() {
-                    let fee = coin.amount * config.rewards_fee;
-                    basket_fees.push(Coin {
-                        denom: coin.denom.clone(),
-                        amount: fee,
-                    });
-                    basket_to_treasure_chest.push(Coin {
-                        denom: coin.denom.clone(),
-                        amount: coin.amount.checked_sub(fee)?,
-                    });
+                // Split the basket, taking the rewards fees into account
+                if old_basket.is_empty() {
+                    return Err(ContractError::EmptyBasketRewards {});
                 }
 
-                // reset the bidding balance to 0 if we won, otherwise keep the balance for the next
-                // round
+                for coin in old_basket.iter() {
+                    let fee = coin.amount * config.rewards_fee;
+                    if !fee.is_zero() {
+                        basket_fees.push(Coin {
+                            denom: coin.denom.clone(),
+                            amount: fee,
+                        })
+                    }
+
+                    let net_amount = coin.amount.checked_sub(fee)?;
+                    if !net_amount.is_zero() {
+                        add_coin_to_basket(
+                            &mut basket_to_treasure_chest,
+                            Coin {
+                                denom: coin.denom.clone(),
+                                amount: net_amount,
+                            },
+                        )?
+                    }
+                }
+
+                // reset the bidding balance to 0 if we won, otherwise keep the balance for the next round
                 BIDDING_BALANCE.save(deps.storage, &Uint128::zero())?;
 
                 // transfer corresponding tokens to the rewards fee address
-                messages.push(CosmosMsg::Bank(BankMsg::Send {
-                    to_address: config.rewards_fee_addr.to_string(),
-                    amount: basket_fees,
-                }));
+                if !basket_fees.is_empty() {
+                    messages.push(CosmosMsg::Bank(BankMsg::Send {
+                        to_address: config.rewards_fee_addr.to_string(),
+                        amount: basket_fees,
+                    }))
+                }
 
                 // instantiate a treasury chest contract and get the future contract address
                 let code_id = config.treasury_chest_code_id;
@@ -184,25 +192,23 @@ pub(crate) fn new_auction_round(
                 ));
 
                 // create a new denom for the current auction round
+                let amount = must_pay(&info, &config.native_denom)?;
+                if amount < config.min_balance {
+                    return Err(ContractError::InsufficientFunds {
+                        native_denom: config.native_denom,
+                        min_balance: config.min_balance,
+                    });
+                }
                 messages.push(config.token_factory_type.create_denom(
                     env.contract.address.clone(),
                     format!("auction.{}", new_subdenom).as_str(),
                 ));
 
-                let basket = current_auction_round_response
-                    .amount
-                    .iter()
-                    .map(|coin| Coin {
-                        amount: Uint128::from_str(&coin.amount.to_string())
-                            .expect("Failed to parse coin amount"),
-                        denom: coin.denom.clone(),
-                    })
-                    .collect();
-
+                // save the current auction details to the contract state
                 UNSETTLED_AUCTION.save(
                     deps.storage,
                     &Auction {
-                        basket,
+                        basket: new_basket,
                         auction_round: current_auction_round_response.auction_round.u64(),
                         lp_subdenom: new_subdenom,
                         closing_time: current_auction_round_response.auction_closing_time.i64()
@@ -213,7 +219,10 @@ pub(crate) fn new_auction_round(
                     "settled_auction_round",
                     unsettled_auction.auction_round.to_string(),
                 ));
-                attributes.push(attr("new_auction_round", current_auction_round.to_string()));
+                attributes.push(attr(
+                    "new_auction_round",
+                    current_auction_round_response.auction_round.to_string(),
+                ));
                 attributes.push(attr("treasure_chest_address", treasure_chest_address.to_string()));
                 attributes.push(attr("new_subdenom", format!("auction.{}", new_subdenom)));
 
@@ -226,15 +235,7 @@ pub(crate) fn new_auction_round(
                 UNSETTLED_AUCTION.save(
                     deps.storage,
                     &Auction {
-                        basket: current_auction_round_response
-                            .amount
-                            .iter()
-                            .map(|coin| Coin {
-                                amount: Uint128::from_str(&coin.amount.to_string())
-                                    .expect("Failed to parse coin amount"),
-                                denom: coin.denom.clone(),
-                            })
-                            .collect(),
+                        basket: new_basket,
                         auction_round: current_auction_round_response.auction_round.u64(),
                         lp_subdenom: unsettled_auction.lp_subdenom,
                         closing_time: current_auction_round_response.auction_closing_time.i64()
@@ -245,7 +246,10 @@ pub(crate) fn new_auction_round(
                     "settled_auction_round",
                     unsettled_auction.auction_round.to_string(),
                 ));
-                attributes.push(attr("new_auction_round", current_auction_round.to_string()));
+                attributes.push(attr(
+                    "new_auction_round",
+                    current_auction_round_response.auction_round.to_string(),
+                ));
                 Ok((messages, attributes))
             }
         },
@@ -254,7 +258,7 @@ pub(crate) fn new_auction_round(
             UNSETTLED_AUCTION.save(
                 deps.storage,
                 &Auction {
-                    basket: current_basket,
+                    basket: new_basket,
                     auction_round: current_auction_round_response.auction_round.u64(),
                     lp_subdenom: 0,
                     closing_time: current_auction_round_response.auction_closing_time.i64() as u64,
@@ -268,7 +272,10 @@ pub(crate) fn new_auction_round(
                 config.token_factory_type.create_denom(env.contract.address.clone(), "auction.0"),
             );
 
-            attributes.push(attr("new_auction_round", current_auction_round.to_string()));
+            attributes.push(attr(
+                "new_auction_round",
+                current_auction_round_response.auction_round.to_string(),
+            ));
             attributes.push(attr("lp_subdenom", "auction.0"));
             Ok((messages, attributes))
         },
@@ -296,4 +303,25 @@ pub(crate) fn query_current_auction(
         })?;
 
     Ok(current_auction_basket_response)
+}
+
+// Adds coins to the basket or increments the amount if the coin already exists (avoiding duplicates)
+fn add_coin_to_basket(basket: &mut Vec<Coin>, coin: Coin) -> Result<(), ContractError> {
+    if let Some(existing_coin) = basket.iter_mut().find(|c| c.denom == coin.denom) {
+        existing_coin.amount = existing_coin.amount.checked_add(coin.amount)?;
+    } else {
+        basket.push(coin);
+    }
+    Ok(())
+}
+
+/// Queries the latest auction result
+pub(crate) fn query_latest_auction_result(deps: Deps) -> StdResult<QueryLastAuctionResultResponse> {
+    let last_auction_result_response: QueryLastAuctionResultResponse =
+        deps.querier.query(&QueryRequest::Stargate {
+            path: "/injective.auction.v1beta1.Query/LastAuctionResult".to_string(),
+            data: [].into(),
+        })?;
+
+    Ok(last_auction_result_response)
 }

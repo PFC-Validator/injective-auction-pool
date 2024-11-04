@@ -5,7 +5,9 @@ use injective_std::types::cosmos::base::v1beta1::Coin;
 use injective_std::types::injective::auction::v1beta1::MsgBid;
 
 use crate::{
-    helpers::{new_auction_round, query_current_auction, validate_percentage},
+    helpers::{
+        new_auction_round, query_current_auction, query_latest_auction_result, validate_percentage,
+    },
     state::{
         Whitelisted, BIDDING_BALANCE, CONFIG, FUNDS_LOCKED, UNSETTLED_AUCTION,
         WHITELISTED_ADDRESSES,
@@ -119,18 +121,25 @@ pub(crate) fn join_pool(
         });
     }
 
-    let mut messages = vec![];
+    let unsettled_auction = UNSETTLED_AUCTION.load(deps.storage)?;
+
+    // if the current auction round is different from the unsettled auction round,
+    // prevent the user from joining the pool
+    if unsettled_auction.auction_round != current_auction_round.u64() {
+        return Err(ContractError::AuctionRoundNotSettled {
+            unsettled_auction_round: unsettled_auction.auction_round,
+            current_auction_round: current_auction_round.u64(),
+        });
+    }
 
     // mint the lp token and send it to the user
-    let lp_subdenom = UNSETTLED_AUCTION.load(deps.storage)?.lp_subdenom;
-    messages.push(config.token_factory_type.mint(
-        env.contract.address.clone(),
-        format!("factory/{}/auction.{}", env.contract.address.clone(), lp_subdenom).as_str(),
-        amount,
-    ));
+    let mut messages = vec![];
+    let lp_denom =
+        format!("factory/{}/auction.{}", env.contract.address, unsettled_auction.lp_subdenom);
+
+    messages.push(config.token_factory_type.mint(env.contract.address.clone(), &lp_denom, amount));
 
     // send the minted lp token to the user address
-    let lp_denom = format!("factory/{}/auction.{}", env.contract.address, lp_subdenom);
     messages.push(
         BankMsg::Send {
             to_address: info.sender.to_string(),
@@ -311,11 +320,55 @@ pub fn settle_auction(
 
     FUNDS_LOCKED.save(deps.storage, &false)?;
 
-    let (messages, attributes) =
-        new_auction_round(deps, &env, info, Some(auction_winner), Some(auction_winning_bid))?;
+    let (messages, attributes) = new_auction_round(
+        deps,
+        &env,
+        info,
+        Some(auction_winner),
+        Some(auction_winning_bid),
+        unsettled_auction.basket,
+    )?;
 
     Ok(Response::default()
         .add_attribute("action", "settle_auction")
+        .add_messages(messages)
+        .add_attributes(attributes))
+}
+
+/// Tries to settle the latest auction permissionlessly
+pub fn try_settle_auction(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let unsettled_auction = UNSETTLED_AUCTION.load(deps.storage)?;
+
+    let latest_auction_result_response = query_latest_auction_result(deps.as_ref())?
+        .last_auction_result
+        .ok_or(ContractError::EmptyAuctionResult {})?;
+
+    // can only settle the latest auction round permissionlessly
+    if unsettled_auction.auction_round != latest_auction_result_response.round {
+        return Err(ContractError::AuctionRoundMismatch {
+            unsettled: unsettled_auction.auction_round,
+            latest: latest_auction_result_response.round,
+        });
+    }
+
+    FUNDS_LOCKED.save(deps.storage, &false)?;
+
+    let (messages, attributes) = new_auction_round(
+        deps,
+        &env,
+        info,
+        Some(latest_auction_result_response.winner),
+        Some(latest_auction_result_response.amount.parse()?),
+        unsettled_auction.basket,
+    )?;
+
+    Ok(Response::default()
+        .add_attribute("action", "try_settle_auction")
+        .add_attribute("auction_round", unsettled_auction.auction_round.to_string())
         .add_messages(messages)
         .add_attributes(attributes))
 }

@@ -61,7 +61,7 @@ pub fn instantiate(
 
     FUNDS_LOCKED.save(deps.storage, &false)?;
 
-    let (messages, attributes) = new_auction_round(deps, &env, info, None, None)?;
+    let (messages, attributes) = new_auction_round(deps, &env, info, None, None, vec![])?;
 
     Ok(Response::default()
         .add_messages(messages)
@@ -112,6 +112,7 @@ pub fn execute(
             auction_winner,
             auction_winning_bid,
         } => settle_auction(deps, env, info, auction_round, auction_winner, auction_winning_bid),
+        ExecuteMsg::TrySettleAuction {} => executions::try_settle_auction(deps, env, info),
     }
 }
 
